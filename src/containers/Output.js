@@ -93,10 +93,10 @@ class Output extends Component {
     }
   }
 
-  getNextOffset(line) {
+  getNextOffset(line, char=null) {
     const lastIndex = line.length - 1;
     const lastChar = line[lastIndex] || this.newChar(-1, null);
-    const offset = lastChar.offset + 1;
+    const offset = lastChar.offset + (char === null ? 1: 0);
     return offset;
   }
 
@@ -108,7 +108,7 @@ class Output extends Component {
   addCharToLine(lineState, char=null) {
     const {line, copies} = lineState;
 
-    const offset = this.getNextOffset(line);
+    const offset = this.getNextOffset(line, char);
     const newChar = this.newChar(offset, char);
     const newLine = line.concat([newChar]);
 
