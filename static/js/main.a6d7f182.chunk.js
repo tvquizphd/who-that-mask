@@ -1,2 +1,0 @@
-(this["webpackJsonpwhos-that-outline"]=this["webpackJsonpwhos-that-outline"]||[]).push([[0],{11:function(t,e,n){"use strict";n.r(e);var c=n(1),o=n.n(c),i=n(3),s=n.n(i),r=(n(8),n(9),n(0));var a=function(){return Object(r.jsx)("div",{className:"App",children:Object(r.jsx)("div",{children:"Hello World"})})};s.a.render(Object(r.jsx)(o.a.StrictMode,{children:Object(r.jsx)(a,{})}),document.getElementById("root"))},8:function(t,e,n){},9:function(t,e,n){}},[[11,1,2]]]);
-//# sourceMappingURL=main.a6d7f182.chunk.js.map

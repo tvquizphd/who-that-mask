@@ -1,1 +1,0 @@
-{"version":3,"sources":["webpack://src/index.css"],"names":[],"mappings":"AAAA,KACE,8CACF,CACA,KACE,2CACF","file":"main.76b2c454.chunk.css","sourcesContent":["body {\n  font-family: Verdana, Arial, Helvetica, sans-serif;\n}\ncode {\n  font-family: Menlo, Monaco, Consolas, monospace;\n}\n"]}
