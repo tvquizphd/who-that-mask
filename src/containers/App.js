@@ -1,4 +1,4 @@
-import './App.css';
+import Output from './Output.js';
 
 function App() {
   return (
@@ -6,6 +6,8 @@ function App() {
       <div>
         Hello World
       </div>
+      <Output>
+      </Output>
     </div>
   );
 }

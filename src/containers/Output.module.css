@@ -1,0 +1,17 @@
+.outline {
+  background-color: lavender;
+	position: relative;
+}
+
+.outline > .line {
+	white-space: nowrap;
+	position: absolute;
+  height: auto;
+  width: auto;
+}
+
+.grid {
+  display: grid;
+	justify-content: space-around;
+	grid-template-columns: auto auto auto;
+}
