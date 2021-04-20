@@ -4,7 +4,7 @@ function App() {
   return (
     <div className="App">
       <div>
-        Hello Missingo
+        Hello Missingno
       </div>
       <Output>
       </Output>
