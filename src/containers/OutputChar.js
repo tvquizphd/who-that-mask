@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import React, { Fragment, Component } from 'react';
 
 class OutputChar extends Component {
 
@@ -10,6 +10,11 @@ class OutputChar extends Component {
 
   render() {
     const {children} = this.props;
+    if (children === ' ') {
+      return (
+        <Fragment>&nbsp;</Fragment>
+      );
+    }
     return children;
   }
 }

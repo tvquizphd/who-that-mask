@@ -29,7 +29,7 @@ const sameFloor = (v0, v1) => {
 class Output extends Component {
   constructor(props) {
     super(props);
-    const SHAPE = [500, 500];
+    const SHAPE = [450, 950];
     const {innerWidth, innerHeight} = window;
     this.state = {
       maxHeight: minFloor(SHAPE[1], innerHeight),
@@ -85,17 +85,17 @@ class Output extends Component {
     return makeNewLine(line);
   }
 
-  newChar(offset) {
+  newChar(offset, char=null) {
     const {label} = this.state;
     return {
-      char: label[offset % label.length],
+      char: char === null ? (label[offset % label.length]) : char,
       offset: offset
     }
   }
 
   getNextOffset(line) {
     const lastIndex = line.length - 1;
-    const lastChar = line[lastIndex] || this.newChar(-1);
+    const lastChar = line[lastIndex] || this.newChar(-1, null);
     const offset = lastChar.offset + 1;
     return offset;
   }
@@ -105,11 +105,11 @@ class Output extends Component {
     return lines[lastIndex] || this.newLine();
   }
 
-  addCharToLine(lineState) {
+  addCharToLine(lineState, char=null) {
     const {line, copies} = lineState;
 
     const offset = this.getNextOffset(line);
-    const newChar = this.newChar(offset);
+    const newChar = this.newChar(offset, char);
     const newLine = line.concat([newChar]);
 
     const finishedCopy = this.isWholeLabel(newLine);
@@ -124,9 +124,40 @@ class Output extends Component {
 
   addChars(num, clientWidth) {
     const {lines} = this.state;
+    let missing = [
+      [0,0,0,0,0,0,0,0,0],
+      [0,0,0,0,1,1,1,0,0],
+      [0,0,0,0,1,1,1,0,0],
+      [0,0,0,0,1,1,1,0,0],
+      [0,0,0,0,1,1,1,0,0],
+      [0,0,0,0,1,1,1,0,0],
+      [0,0,1,1,1,1,1,0,0],
+      [0,0,1,1,1,1,1,0,0],
+      [0,0,1,1,1,1,1,0,0],
+      [0,0,1,1,1,1,1,0,0],
+      [0,0,1,1,1,1,1,0,0],
+      [0,0,1,1,1,1,1,0,0],
+      [0,0,1,1,1,1,1,0,0],
+      [0,0,1,1,1,1,1,0,0],
+      [0,0,0,0,0,0,0,0,0],
+    ];
+
+    const {width} = this.getShape();
+    const maxLines = this.getMaxLines();
+
+    const guessMask = (i) => {
+      const {label, labelWidth} = this.state;
+      const guessCharWidth = labelWidth / label.length;
+      const guessWidth = clientWidth + i * guessCharWidth;
+      const x = Math.floor((guessWidth / width) * missing[0].length);
+      const y = Math.floor(((lines.length - 1) / maxLines) * missing.length);
+      return missing[y][x];
+    }
+
     const numRange = [...Array(num).keys()];
-    const {lastLine, labelWidth} = numRange.reduce((output) => {
-      const lastLine = this.addCharToLine(output.lastLine);
+    const {lastLine, labelWidth} = numRange.reduce((output, i) => {
+      const space = guessMask(i) === 1 ? ' ' : null;
+      const lastLine = this.addCharToLine(output.lastLine, space);
       const labelWidth = output.labelWidth || (
         lastLine.copies === 1 ? clientWidth : null
       );
@@ -154,11 +185,11 @@ class Output extends Component {
     const {lines} = numRange.reduce((output) => {
       // TODO... only works for num=1
       const lastLine = this.getLastLine(output.lines)
-      const offset = this.getNextOffset(lastLine);
+      const offset = this.getNextOffset(lastLine.line);
 
       const newLines = output.lines.concat([
         this.newLine([
-          this.newChar(offset)
+          this.newChar(offset, null)
         ])
       ]);
       return {
