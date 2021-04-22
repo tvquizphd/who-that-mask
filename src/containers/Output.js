@@ -3,12 +3,33 @@ import styles from './Output.module.css';
 import OutputLine from './OutputLine';
 import OutputChar from './OutputChar';
 
+ /*
+const sleep = async (ms) => {
+  await ((ms) => {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  })();
+}
+ */
+
 const makeNewLine = (line=[]) => {
   return {
-    ready: false,
+    clientWidth: 0,
     line: line,
     copies: 0
   }
+}
+
+const makeNewLines = (num) => {
+  const numRange = [...Array(num).keys()];
+  return numRange.map(()=>{
+    return makeNewLine([]);
+  })
+} 
+
+const immutableInsert = (a, v, i) => {
+  return a.map((_v, _i) => {
+    return (_i === i) ? v : _v;
+  })
 }
 
 const isSameOffset = (v0, v1, label) => {
@@ -29,35 +50,28 @@ const sameFloor = (v0, v1) => {
 class Output extends Component {
   constructor(props) {
     super(props);
-    const SHAPE = [450, 950];
+    const fontSize = 12;
+    const [idealWidth, idealHeight] = [450, 950];
     const {innerWidth, innerHeight} = window;
+    const maxWidth = minFloor(idealWidth, innerWidth);
+    const maxHeight = minFloor(idealHeight, innerHeight); 
+    const lines = makeNewLines(Math.floor(maxHeight / fontSize));
     this.state = {
-      maxHeight: minFloor(SHAPE[1], innerHeight),
-      maxWidth: minFloor(SHAPE[0], innerWidth),
-      idealHeight: SHAPE[1],
-      idealWidth: SHAPE[0],
-      fontSize: 12,
-      lines: [makeNewLine()],
+      lines,
+      idealHeight,
+      idealWidth,
+      maxHeight,
+      maxWidth,
+      fontSize,
       label: 'missingno',
+      canRender: true,
       labelWidth: 0
     };
-    this.onLineReady = this.onLineReady.bind(this);
+    this.enqueueLineUpdate = this.enqueueLineUpdate.bind(this);
+    this.addCharsToLine = this.addCharsToLine.bind(this);
+    this.addCharToLine = this.addCharToLine.bind(this);
     this.updateShape = this.updateShape.bind(this);
-    this.addChars = this.addChars.bind(this);
-  }
-
-  updateShape() {
-    const newState = {}
-    const {maxWidth, maxHeight} = this.state;
-    const {innerWidth, innerHeight} = window;
-
-    if (!sameFloor(maxWidth, innerWidth)) {
-      newState.maxWidth = Math.floor(innerWidth);
-    }
-    if (!sameFloor(maxHeight, innerHeight)) {
-      newState.maxHeight = Math.floor(innerHeight);
-    }
-    this.setState(newState);
+    this.lineQueue = Promise.resolve(true);
   }
 
   getShape() {
@@ -105,26 +119,8 @@ class Output extends Component {
     return lines[lastIndex] || this.newLine();
   }
 
-  addCharToLine(lineState, char=null) {
-    const {line, copies} = lineState;
-
-    const offset = this.getNextOffset(line, char);
-    const newChar = this.newChar(offset, char);
-    const newLine = line.concat([newChar]);
-
-    const finishedCopy = this.isWholeLabel(newLine);
-    const newCopies = copies + (finishedCopy? 1 : 0);
-
-    return {
-      ...lineState,
-      line: newLine,
-      copies: newCopies
-    };
-  }
-
-  addChars(num, clientWidth) {
-    const {lines} = this.state;
-    let missing = [
+  guessMask(i, j) {
+    const missing = [
       [0,0,0,0,0,0,0,0,0],
       [0,0,0,0,1,1,1,0,0],
       [0,0,0,0,1,1,1,0,0],
@@ -144,98 +140,170 @@ class Output extends Component {
 
     const {width} = this.getShape();
     const maxLines = this.getMaxLines();
+    const {lines, label, labelWidth} = this.state;
+    const {clientWidth} = lines[j];
 
-    const guessMask = (i) => {
-      const {label, labelWidth} = this.state;
-      const guessCharWidth = labelWidth / label.length;
-      const guessWidth = clientWidth + i * guessCharWidth;
-      const x = Math.floor((guessWidth / width) * missing[0].length);
-      const y = Math.floor(((lines.length - 1) / maxLines) * missing.length);
-      return missing[y][x];
-    }
-
-    const numRange = [...Array(num).keys()];
-    const {lastLine, labelWidth} = numRange.reduce((output, i) => {
-      const space = guessMask(i) === 1 ? ' ' : null;
-      const lastLine = this.addCharToLine(output.lastLine, space);
-      const labelWidth = output.labelWidth || (
-        lastLine.copies === 1 ? clientWidth : null
-      );
-      return {
-        labelWidth,
-        lastLine
-      };
-    }, {
-      labelWidth: this.state.labelWidth,
-      lastLine: this.getLastLine(lines)
-    });
-    const newLines = lines.slice(0,-1).concat([lastLine]);
-    this.setState({
-      lines: newLines,
-      labelWidth
-    })
+    // Convert client coords to mask coords
+    const guessCharWidth = labelWidth / label.length;
+    const guessWidth = clientWidth + i * guessCharWidth;
+    const x = Math.floor((guessWidth / width) * missing[0].length);
+    const y = Math.floor((j / maxLines) * missing.length);
+    return missing[y][x];
   }
 
-  addLines(num=1) {
-    if (num!==1) {
-      console.error('Cannot add multiple lines yet');
-      return;
-    }
-    const numRange = [...Array(num).keys()];
-    const {lines} = numRange.reduce((output) => {
-      // TODO... only works for num=1
-      const lastLine = this.getLastLine(output.lines)
-      const offset = this.getNextOffset(lastLine.line);
+  addCharToLineCore(lineState, char=null) {
+    const {line, copies} = lineState;
 
-      const newLines = output.lines.concat([
-        this.newLine([
-          this.newChar(offset, null)
-        ])
-      ]);
-      return {
-        lines: newLines
-      };
-    }, {
-      lines: this.state.lines
-    });
-    this.setState({
-      lines: lines
-    })
+    const offset = this.getNextOffset(line, char);
+    const newChar = this.newChar(offset, char);
+    const newLine = line.concat([newChar]);
+
+    const finishedCopy = this.isWholeLabel(newLine);
+    const newCopies = copies + (finishedCopy? 1 : 0);
+
+    return {
+      ...lineState,
+      line: newLine,
+      copies: newCopies
+    };
   }
 
-  onLineReady(id) {
-    const {lines} = this.state;
-    if (id < lines.length) {
-      const newLines = lines.map((line, i) => {
-        if (id === i) {
-          return {
-            ...line,
-            ready: true
-          };
-        }
-        return line;
-      });
-      this.setState({
-        lines: newLines
-      });
-    }
-  }
-
-  componentDidMount() {
-    window.addEventListener('resize', this.updateShape);
-
-    this.timer = setInterval(() => {
-      const {lines} = this.state;
-      const maxLines = this.getMaxLines();
-      const {ready} = this.getLastLine(lines);
-      if (ready && lines.length < maxLines) {
-        this.addLines(1);
+  addCharToLine(input, i) {
+    const {lines, lineIdx, labelWidth} = input;
+    const oldLineState = lines[lineIdx];
+    const output = {};
+    if (oldLineState && this.canLineRender(lineIdx)) {
+      const space = this.guessMask(i, lineIdx) === 1 ? ' ' : null;
+      const newLineState = this.addCharToLineCore(oldLineState, space);
+      const {copies, clientWidth} = newLineState;
+      // Track the width of a single word
+      if (!labelWidth && copies === 1) {
+        output.labelWidth = clientWidth;
       }
-    }, 100);
+      output.lines = immutableInsert(lines, newLineState, lineIdx);
+      output.allReady = false;
+    }
+    return { 
+      ...input,
+      ...output
+    };
   }
 
-  componentWillUnmount() {
-    clearInterval(this.timer);
+  addCharsToLine(input, lineIdx) {
+    const {num, lines} = input;
+    const {labelWidth, allReady} = input;
+    const numRange = [...Array(num).keys()];
+    const output = numRange.reduce(this.addCharToLine, {
+      lines,
+      lineIdx,
+      labelWidth,
+      allReady
+    });
+    return {
+      ...input,
+      ...output
+    };
+  }
+
+  onColumnUpdate() {
+    return new Promise((resolve) => {
+      const {lines, labelWidth} = this.state;
+      const lineRange = [...lines.keys()];
+      const output = lineRange.reduce(this.addCharsToLine, {
+        labelWidth, lines, allReady: true, num: 1 
+      });
+
+      if (output.allReady) {
+        return resolve();
+      }
+      this.setState({
+        canRender: true,
+        lines: output.lines,
+        labelWidth: output.labelWidth
+      }, resolve);
+    });
+  }
+
+  onLineUpdate(id, clientWidth) {
+    return new Promise((resolve) => {
+      const {lines} = this.state;
+      if (id < lines.length) {
+        const newLines = lines.map((lineState, i) => {
+          if (id === i) {
+            return {
+              ...lineState,
+              clientWidth: clientWidth
+            };
+          }
+          return lineState;
+        });
+        this.setState({
+          canRender: false,
+          lines: newLines
+        }, resolve);
+      }
+    });
+  }
+
+  enqueueLineUpdate(id, clientWidth) {
+    this.lineQueue.then(async () => {
+      return await this.onLineUpdate(id, clientWidth);
+    })
+  }
+
+  canLineRender(id) {
+    const {lines} = this.state;
+    const {width} = this.getShape();
+    const lineState = lines[id];
+    if (!lineState) {
+      return false;
+    }
+    const {clientWidth} = lineState;
+    const remaining = width - clientWidth;
+    return remaining > 0;
+  }
+
+  updateShape() {
+    const newState = {};
+    const oldShape = this.getShape();
+    const {maxWidth, maxHeight, fontSize} = this.state;
+    const {innerWidth, innerHeight} = window;
+
+    if (!sameFloor(maxWidth, innerWidth)) {
+      newState.maxWidth = Math.floor(innerWidth);
+    }
+    if (!sameFloor(maxHeight, innerHeight)) {
+      newState.maxHeight = Math.floor(innerHeight);
+    }
+    this.setState(newState, async () => {
+      const {height, width} = this.getShape();
+      // No need to redraw output if the shape has not changed
+      if (oldShape.height === height && oldShape.width === width) {
+        return;
+      }
+      await this.lineQueue;
+      const numLines = Math.floor(height / fontSize);
+      this.setState({
+        canRender: true,
+        lines: makeNewLines(numLines)
+      });
+    });
+  }
+
+  async componentDidMount() {
+    window.addEventListener('resize', this.updateShape);
+    await this.onColumnUpdate();
+  }
+
+  async componentDidUpdate() {
+    //await sleep(10); //sleep is easier on the eyes in dev mode
+    await this.lineQueue;
+    await this.onColumnUpdate();
+  }
+
+  shouldComponentUpdate(nextProps, nextState) {
+    const {canRender} = nextState;
+    return canRender;
   }
 
   render() {
@@ -253,14 +321,14 @@ class Output extends Component {
 
     const outline = (
       <div style={outlineStyle} className={styles.outline}>
-        {lines.map(({line, copies, ready}, i) => {
+        {lines.map(({line, copies}, i) => {
           const lineStyle ={
             top: i * fontSize
           };
           return (
-            <OutputLine addChars={this.addChars} onLineReady={this.onLineReady}
-              labelWidth={labelWidth} fullWidth={width}
-              copies={copies} ready={ready}
+            <OutputLine enqueueLineUpdate={this.enqueueLineUpdate}
+              labelWidth={labelWidth} copies={copies}
+              canRender={this.canLineRender(i)}
               stl={lineStyle} cls={styles.line} key={i} id={i}
             >
               {line.map(({char}, j) => {

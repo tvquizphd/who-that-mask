@@ -3,32 +3,13 @@ import React, { Component } from 'react';
 class OutputLine extends Component {
 
   shouldComponentUpdate(nextProps, nextState) {
-    const {ready} = this.props;
-    const newReady = nextProps.ready;
-    return !(ready && newReady);
+    const {canRender} = nextProps;
+    return canRender;
   }
 
   checkWidth(clientWidth) {
-    const {id, ready, fullWidth} = this.props;
-    if (ready) {
-      return;
-    }
-    const {onLineReady, addChars} = this.props;
-    const remaining = fullWidth - clientWidth;
-    if (remaining > 0) {
-      const {labelWidth, copies} = this.props;
-      const initial = copies < 1 || labelWidth < 1;
-      const final = labelWidth > 1 && remaining < labelWidth;
-      if (initial || final) {
-        addChars(1, clientWidth);
-      }
-      else {
-        addChars(Math.floor(remaining / labelWidth), clientWidth);
-      }
-    }
-    else {
-      onLineReady(id);
-    }
+    const {id, enqueueLineUpdate} = this.props;
+    enqueueLineUpdate(id, clientWidth);
   }
 
   render() {
