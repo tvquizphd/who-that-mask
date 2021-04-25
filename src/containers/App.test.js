@@ -1,8 +1,8 @@
 import { render, screen } from '@testing-library/react';
 import App from './App';
 
-test('renders hello world', () => {
+test('renders an m on many lines', () => {
   render(<App />);
-  const helloElement = screen.getByText(/Hello Missingno/i);
-  expect(helloElement).toBeInTheDocument();
+  const mElements = screen.getAllByText(/m/i);
+  expect(mElements[0]).toBeInTheDocument();
 });

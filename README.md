@@ -1,6 +1,6 @@
 # Getting Started
 
-Visit [the live site](https://tvquizphd.github.io/whos-that-outline/).
+Visit [the live site](https://tvquizphd.github.io/who-that-mask/).
 
 ## Available Scripts
 
