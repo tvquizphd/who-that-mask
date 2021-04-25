@@ -19,11 +19,13 @@ class OutputLine extends Component {
       <div style={stl} className={cls}
         ref={(el) => {
           if (el) {
-            this.checkWidth(el.clientWidth);
+          const {width} = el.getBoundingClientRect();
+            this.checkWidth(width);
           }
         }}
       >
         {children}
+        <br/>
       </div>
     );
   }
