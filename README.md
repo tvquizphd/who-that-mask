@@ -1,6 +1,6 @@
 # Getting Started
 
-Visit [the live site](https://tvquizphd.github.io/who-that-mask/).
+Visit [the live site](https://who.skippy-doo.com/).
 
 ## Available Scripts
 
