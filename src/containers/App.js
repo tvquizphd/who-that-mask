@@ -1,26 +1,37 @@
-import React, { useState } from "react";
+import React from "react";
+import {
+  BrowserRouter as Router,
+  Switch,
+  Route,
+} from "react-router-dom";
+
 import Output from './Output.js';
 
+function RenderOutput({alignment}) {
+  return (
+    <Output space=' ' stepSize={100}
+      alignment={alignment}
+    >
+    </Output>
+  );
+}
+
 function App() {
-  const [colAlignment, setColAlignment] = useState(true);
-  const alignment = ['row', 'column'][+colAlignment];
 
   return (
-    <div className="App">
-      <div>
-        Align columns:
-        <input
-          type="checkbox"
-          checked={colAlignment}
-          onChange={(e) => setColAlignment(e.target.checked)}
-        />
+    <Router>
+      <div className="App">
+        <Switch>
+          <Route path="/row">
+            {RenderOutput({alignment:'row'})}
+          </Route>
+          <Route path="/">
+            {RenderOutput({alignment:'column'})}
+          </Route>
+        </Switch>
       </div>
-      <Output space=' ' stepSize={100}
-        alignment={alignment}
-      >
-      </Output>
-    </div>
-  );
+    </Router>
+  )
 }
 
 export default App;
