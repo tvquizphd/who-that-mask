@@ -133,18 +133,21 @@ class Output extends Component {
     const {width} = this.getShape();
     const {label, widthMap} = this.state;
     const maxRange = [...Array(width).keys()];
-    const {prior} = maxRange.reduce(({prior, sumWidth}, off) => {
+    const {prior} = maxRange.reduce((result, off) => {
+      const {done, prior, sumWidth} = result;
       const offWidth = widthMap.get(indexLabel(label, off)) || 0;
-      if (sumWidth + offWidth >= elWidth) {
-        return {prior, sumWidth};
+      if (done || sumWidth + offWidth > elWidth + offWidth/2) {
+        return {done: true, prior, sumWidth};
       }
       return {
         prior: off,
+        done: false,
         sumWidth: sumWidth + offWidth
       }
     }, {
       prior: -1,
-      sumWidth: 0
+      sumWidth: 0,
+      done: false
     });
     return Math.max(prior + increment, 0);
   }
