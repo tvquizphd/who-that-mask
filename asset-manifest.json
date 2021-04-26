@@ -1,20 +1,20 @@
 {
   "files": {
     "main.css": "/who-that-mask/static/css/main.05a6ce7c.chunk.css",
-    "main.js": "/who-that-mask/static/js/main.ccc9d39c.chunk.js",
-    "main.js.map": "/who-that-mask/static/js/main.ccc9d39c.chunk.js.map",
+    "main.js": "/who-that-mask/static/js/main.4fb85e5d.chunk.js",
+    "main.js.map": "/who-that-mask/static/js/main.4fb85e5d.chunk.js.map",
     "runtime-main.js": "/who-that-mask/static/js/runtime-main.14091cde.js",
     "runtime-main.js.map": "/who-that-mask/static/js/runtime-main.14091cde.js.map",
-    "static/js/2.c326ec09.chunk.js": "/who-that-mask/static/js/2.c326ec09.chunk.js",
-    "static/js/2.c326ec09.chunk.js.map": "/who-that-mask/static/js/2.c326ec09.chunk.js.map",
+    "static/js/2.49ac5fa3.chunk.js": "/who-that-mask/static/js/2.49ac5fa3.chunk.js",
+    "static/js/2.49ac5fa3.chunk.js.map": "/who-that-mask/static/js/2.49ac5fa3.chunk.js.map",
     "index.html": "/who-that-mask/index.html",
     "static/css/main.05a6ce7c.chunk.css.map": "/who-that-mask/static/css/main.05a6ce7c.chunk.css.map",
-    "static/js/2.c326ec09.chunk.js.LICENSE.txt": "/who-that-mask/static/js/2.c326ec09.chunk.js.LICENSE.txt"
+    "static/js/2.49ac5fa3.chunk.js.LICENSE.txt": "/who-that-mask/static/js/2.49ac5fa3.chunk.js.LICENSE.txt"
   },
   "entrypoints": [
     "static/js/runtime-main.14091cde.js",
-    "static/js/2.c326ec09.chunk.js",
+    "static/js/2.49ac5fa3.chunk.js",
     "static/css/main.05a6ce7c.chunk.css",
-    "static/js/main.ccc9d39c.chunk.js"
+    "static/js/main.4fb85e5d.chunk.js"
   ]
 }
