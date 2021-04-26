@@ -13,9 +13,9 @@ const sleep = async (ms) => {
 
 const makeNewLine = (line=[]) => {
   return {
+    numRenders: 0,
     elWidthDiff: 0,
     elWidth: 0,
-    numRenders: 0,
     line: line
   }
 }
@@ -27,12 +27,14 @@ const makeNewLines = (num) => {
   })
 } 
 
-const copyWidthMap = (widthMap, lineState) => {
-  const {line, elWidthDiff} = lineState;
-  const charState = line[line.length - 1];
-  const {char} = charState || {};
-  if (charState && elWidthDiff > 0 && !widthMap.has(char)) {
-    return constMapInsert(widthMap, char, elWidthDiff);
+const readLastChar = (lineState) => {
+  const {line} = lineState;
+  return line.slice(-1)[0];
+}
+
+const copyWidthMap = (widthMap, char, elWidthDiff) => {
+  if (char && elWidthDiff !== 0 && !widthMap.has(char)) {
+    return constMapInsert(widthMap, char, Math.abs(elWidthDiff));
   }
   return widthMap;
 }
@@ -55,6 +57,10 @@ const sameFloor = (v0, v1) => {
   return Math.floor(v0) === Math.floor(v1);
 }
 
+const indexLabel = (label, offset) => {
+  return label[offset % label.length];
+}
+
 const debounceAsync = (fn, t) => {
   const debounced = debounce(fn, t);
   return async function(...args) {
@@ -70,7 +76,7 @@ class Output extends Component {
   constructor(props) {
     super(props);
     const fontSize = 16;
-    const label = 'missingno'
+    const label = 'missingno';
     const [idealWidth, idealHeight] = [450, 950];
     const {innerWidth, innerHeight} = window;
     const maxWidth = minFloor(idealWidth, innerWidth);
@@ -83,9 +89,9 @@ class Output extends Component {
       maxHeight,
       maxWidth,
       fontSize,
-      widthMap: new Map(),
       label: label,
-      canRender: true
+      canRender: true,
+      widthMap: new Map()
     };
     this.updateShape = debounceAsync(this.updateShape, 333).bind(this);
     this.resetLines = debounceAsync(this.resetLines, 333).bind(this);
@@ -114,26 +120,60 @@ class Output extends Component {
     return makeNewLine(line);
   }
 
-  newChar(offset, char) {
-    return { offset, char };
+  newChar({offset=-1, char='?'}) {
+    // Offset of -1 means hidden
+    return {
+      offset: offset,
+      char: char
+    };
   }
 
-  getNextOffset(line, increment) {
-    const lastIndex = line.length - 1;
-    const {offset} = line[lastIndex] || {offset: -1};
-    return offset + increment;
+  getNextOffsetByColumn(lineState, increment) {
+    const {elWidth} = lineState;
+    const {width} = this.getShape();
+    const {label, widthMap} = this.state;
+    const maxRange = [...Array(width).keys()];
+    const {prior} = maxRange.reduce(({prior, sumWidth}, off) => {
+      const offWidth = widthMap.get(indexLabel(label, off)) || 0;
+      if (sumWidth + offWidth >= elWidth) {
+        return {prior, sumWidth};
+      }
+      return {
+        prior: off,
+        sumWidth: sumWidth + offWidth
+      }
+    }, {
+      prior: -1,
+      sumWidth: 0
+    });
+    return Math.max(prior + increment, 0);
   }
 
-  getNextChar(line, increment) {
+  getNextOffset(lineState, increment) {
+    const {offset} = readLastChar(lineState) || {
+      offset: -1
+    };
+    return Math.max(offset + increment, 0);
+  }
+
+  getNextChar(lineState, increment) {
     const {label} = this.state;
-    const offset = this.getNextOffset(line, increment);
-    const char = label[offset % label.length];
-    return this.newChar(offset, char);
+    const {alignment, space} = this.props;
+    const offset = (()=>{
+      if (alignment === 'column' && increment > 0) {
+        const {char} = readLastChar(lineState) || {};
+        if (char === space) {
+          return this.getNextOffsetByColumn(lineState, increment);
+        }
+      }
+      return this.getNextOffset(lineState, increment);
+    })();
+    const char = indexLabel(label, offset);
+    return this.newChar({offset, char});
   }
 
   getLastLine(lines) {
-    const lastIndex = lines.length - 1;
-    return lines[lastIndex] || this.newLine();
+    return lines.slice(-1)[0] || this.newLine();
   }
 
   getRatios(elWidth, lineIdx) {
@@ -155,7 +195,7 @@ class Output extends Component {
 
   readMask(input) {
     const {lineState, lineIdx} = input;
-    const {line, elWidth} = lineState;
+    const {elWidth} = lineState;
     if (!this.checkRatios(elWidth, lineIdx)) {
       return null;
     }
@@ -186,30 +226,56 @@ class Output extends Component {
 
     // Return correct character
     if (missing[y][x]) {
-      return this.newChar(this.getNextOffset(line, 0), ' ');
+      const {space} = this.props;
+      return this.newChar({
+        offset: this.getNextOffset(lineState, 0),
+        char: space
+      });
     }
-    return this.getNextChar(line, 1);
+    return this.getNextChar(lineState, 1);
   }
 
   addCharToLine(input, i) {
     if (input.done) {
       return input;
     }
+
+    const {lineState, hiddenChars} = input;
+    if (hiddenChars.length > 0 && lineState.line.length > 0) {
+      return {
+        ...input,
+        done: true,
+        lineState: {
+          ...lineState,
+          line: lineState.line.concat([
+            hiddenChars.slice(-1)[0]
+          ]),
+        },
+        hiddenChars: hiddenChars.slice(0,-1)
+      };
+    }
+
     const nextChar = this.readMask(input);
     if (nextChar === null) {
       return input;
     }
     const {char} = nextChar;
     const {lineIdx, iMax} = input;
-    const {lineState, widthMap} = input;
     const {elWidth} = lineState;
+    const {widthMap} = this.state;
     const charWidth = widthMap.get(char) || 0;
     const nextWidth = elWidth + charWidth;
+    const inBounds = this.checkRatios(nextWidth, lineIdx);
+    if (!inBounds) {
+      return {
+        ...input,
+        done: true
+      }
+    }
 
     const done = [
       i === iMax, // final character estimate
-      charWidth < 1, // no valid character estimate
-      !this.checkRatios(nextWidth, lineIdx) // out of bounds
+      charWidth < 1 // no valid character estimate
     ].some(x=>x);
 
     return {
@@ -224,38 +290,49 @@ class Output extends Component {
   }
 
   addCharsToLine(input, lineState, lineIdx) {
-    const {num, lines, widthMap} = input;
+    const {num, lines, hiddenChars} = input;
     // Line is ready to go
-    if (!this.canLineRender(lineIdx)) {
+    if (!this.canLineRender(lineState)) {
       return input;
-    }
-    // Line has just been backspaced 
-    if (lineState.elWidthDiff < 0) {
-      return {
-        ...input,
-        allReady: false
-      };
     }
 
     const numRange = [...Array(num).keys()];
     const output = numRange.reduce(this.addCharToLine, {
-      widthMap: copyWidthMap(widthMap, lineState),
-      iMax: num - 1, done: false, lineState, lineIdx
+      iMax: num - 1, done: false, lineState, lineIdx,
+      hiddenChars: hiddenChars
     });
 
     return {
       ...input,
       allReady: false,
-      widthMap: output.widthMap,
+      hiddenChars: output.hiddenChars,
       lines: constListReplace(lines, lineIdx, output.lineState),
     };
   }
 
+  listHiddenChars() {
+    const {space} = this.props;
+    const {widthMap, label} = this.state;
+    const neededChars = label.split('').concat([space]);
+    return neededChars.reduce((hiddenLine, char) => {
+      if (widthMap.has(char)) {
+        return hiddenLine;
+      }
+      return [
+        this.newChar({
+          char: char,
+          offset: -1
+        }),
+        ...hiddenLine
+      ];
+    }, []);
+  }
+
   onColumnUpdate() {
     return new Promise((resolve) => {
-      const {lines, widthMap} = this.state;
+      const {lines} = this.state;
       const output = lines.reduce(this.addCharsToLine, {
-        widthMap: new Map([...widthMap]),
+        hiddenChars: this.listHiddenChars(),
         num: this.props.stepSize,
         allReady: true,
         lines
@@ -269,7 +346,6 @@ class Output extends Component {
       return this.setState({
         canRender: true,
         lines: output.lines,
-        widthMap: output.widthMap
       }, resolve);
     });
   }
@@ -277,11 +353,14 @@ class Output extends Component {
   updateLine(lineState, elWidth) {
     const {width} = this.getShape();
     const {numRenders} = lineState;
-    if (elWidth > width) {
+    const {offset} = readLastChar(lineState) || {
+      offset: 0
+    };
+    // If at end of line or hidden character
+    if (elWidth > width || offset < 0) {
       // We will measure a negative element width
       return {
         ...lineState,
-        numRenders: numRenders + 1,
         line: lineState.line.slice(0, -1),
         elWidthDiff: lineState.elWidth - elWidth
       };
@@ -296,10 +375,13 @@ class Output extends Component {
 
   onLineUpdate(id, elWidth) {
     return new Promise((resolve) => {
-      const {lines} = this.state;
+      const {lines, widthMap} = this.state;
       if (id < lines.length) {
+        const {char} = readLastChar(lines[id]) || {};
         const lineState = this.updateLine(lines[id], elWidth);
+        const {elWidthDiff} = lineState;
         this.setState({
+          widthMap: copyWidthMap(widthMap, char, elWidthDiff),
           lines: constListReplace(lines, id, lineState),
           canRender: false
         }, resolve);
@@ -313,9 +395,7 @@ class Output extends Component {
     })
   }
 
-  canLineRender(id) {
-    const {lines} = this.state;
-    const lineState = lines[id];
+  canLineRender(lineState) {
     if (!lineState) {
       return false;
     }
@@ -378,9 +458,9 @@ class Output extends Component {
   }
 
   shouldComponentUpdate(nextProps, nextState) {
-    const {stepSize} = this.props;
+    const {alignment} = this.props;
     // Redraw completely if step size changes
-    if (nextProps.stepSize !== stepSize) {
+    if (nextProps.alignment !== alignment) {
       this.resetLines();
       return false;
     }
@@ -403,16 +483,16 @@ class Output extends Component {
 
     const outline = (
       <div style={outlineStyle} className={styles.outline}>
-        {lines.map(({line}, i) => {
+        {lines.map((lineState, i) => {
           const lineStyle ={
             top: i * fontSize
           };
           return (
             <OutputLine enqueueLineUpdate={this.enqueueLineUpdate}
-              canRender={this.canLineRender(i)}
+              canRender={this.canLineRender(lineState)}
               stl={lineStyle} cls={styles.line} key={i} id={i}
             >
-              {line.map(({char}, ii) => {
+              {lineState.line.map(({char}, ii) => {
                 return (
                   <OutputChar key={ii}>
                     {char}
