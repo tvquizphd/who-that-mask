@@ -7,6 +7,7 @@ import {
   Link
 } from "react-router-dom";
 
+import styles from './App.module.css';
 import UrlOutput from './UrlOutput.js';
 import DexOutput from './DexOutput.js';
 
@@ -55,7 +56,12 @@ const configureProps = (props) => {
   })(props);
 }
 
+const formatDexLink = (n) => {
+  return `/dex?n=${n}`;
+}
+
 function RenderOutput(props) {
+  const lastPokemon = 898;
   const [speciesIndex, setSpeciesIndex] = useState(NaN);
   const [speciesName, setSpeciesName] = useState('Loading...');
 
@@ -63,24 +69,23 @@ function RenderOutput(props) {
   config.query = useQuery(config.parsers);
   // Configure the navigation
   const header = (({navigation, query}) => {
-    const lastPokemon = 898;
     if (navigation === 'dex') {
       const nullPokemon = isNaN(speciesIndex);
       const prefix = nullPokemon? `#???` : `#${speciesIndex}`;
       const nextIndex = nullPokemon? 1 : (
         Math.max(1, (speciesIndex + 1) % (lastPokemon + 1))
       );
-      const next = `/dex?n=${nextIndex}`;
+      const next = formatDexLink(nextIndex);
       return (
         <div>
           Current Pokémon: <strong>{prefix} {speciesName}</strong>
           ...
-          Next Pokémon:  <Link to={next}>#{nextIndex}</Link>
+          Next:  <Link to={next}>#{nextIndex}</Link>
         </div>
       );
     }
     const randomIndex = Math.ceil(Math.random() * lastPokemon);
-    const random = `/dex?n=${randomIndex}`;
+    const random = formatDexLink(randomIndex);
     return (
       <div>
         Try this Pokémon: <Link to={random}>#{randomIndex}</Link>
@@ -104,6 +109,23 @@ function RenderOutput(props) {
       );
     }
     const {url} = query;
+    if (!url) {
+      return (
+        <div className={styles.n898}>
+          <div className={styles.flex_column}>
+          {[...Array(lastPokemon).keys()].map((i)=> {
+            const dexIndex = i + 1;
+            const dexLink = formatDexLink(dexIndex);
+            return (
+              <div key={dexIndex}>
+                <Link to={dexLink}>Pokémon #{dexIndex}</Link>
+              </div>
+           )
+          })}
+          </div>
+        </div>
+      );
+    }
     return (
       <UrlOutput alignment={alignment}
         url={url || ''}

@@ -396,8 +396,8 @@ class DexOutput extends Component {
       <Output space=' ' stepSize={100}
         readMaskShape={this.readMaskShape}
         readMaskPixel={this.readMaskPixel}
+        label={label.toLocaleLowerCase('en-US')}
         alignment={alignment}
-        label={label}
       >
       </Output>
     )
