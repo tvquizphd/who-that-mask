@@ -3,47 +3,47 @@
   font-size: 1em;
 }
 
-@media (min-width: 300px) {
+@media (min-width: 200px) {
   .n898 {
     height: calc(1em + (898em / 2));
   }
 }
-@media (min-width: 450px) {
+@media (min-width: 300px) {
   .n898 {
     height: calc(1em + (898em / 3));
   }
 }
-@media (min-width: 600px) {
+@media (min-width: 400px) {
   .n898 {
     height: calc(1em + (898em / 4));
   }
 }
-@media (min-width: 750px) {
+@media (min-width: 500px) {
   .n898 {
     height: calc(1em + (898em / 5));
   }
 }
-@media (min-width: 900px) {
+@media (min-width: 600px) {
   .n898 {
     height: calc(1em + (898em / 6));
   }
 }
-@media (min-width: 1050px) {
+@media (min-width: 700px) {
   .n898 {
     height: calc(1em + (898em / 7));
   }
 }
-@media (min-width: 1200px) {
+@media (min-width: 800px) {
   .n898 {
     height: calc(1em + (898em / 8));
   }
 }
-@media (min-width: 1350px) {
+@media (min-width: 900px) {
   .n898 {
     height: calc(1em + (898em / 9));
   }
 }
-@media (min-width: 1500px) {
+@media (min-width: 1000px) {
   .n898 {
     height: calc(1em + (898em / 10));
   }
