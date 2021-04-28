@@ -82,7 +82,7 @@ function RenderOutput(props) {
             <Link to='/'>Home</Link>
           </span>
           <span>
-            Pokémon <strong>{prefix} {speciesName}</strong>
+            <strong>{prefix} {speciesName}</strong>
           </span>
           <span>
             Next:  <Link to={next}>#{nextIndex}</Link>
