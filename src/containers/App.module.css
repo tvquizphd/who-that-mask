@@ -49,6 +49,13 @@
   }
 }
 
+.flex_row {
+  display: flex;
+  flex-wrap: wrap;
+  flex-direction: row;
+  justify-content: space-evenly;
+}
+
 .flex_column {
   height: 100%;
   display: flex;  

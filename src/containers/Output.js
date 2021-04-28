@@ -13,6 +13,8 @@ const sleep = async (ms) => {
     return new Promise((resolve) => setTimeout(resolve, ms));
   })();
 }*/
+const MAGIC_HEIGHT = 950;
+const MAX_WIDTH = 450;
 
 const makeNewLine = (line=[]) => {
   return {
@@ -69,18 +71,19 @@ class Output extends Component {
   constructor(props) {
     super(props);
     const fontSize = 16;
-    const [idealWidth, idealHeight] = [450, 950];
+    const [w, h] = this.props.readMaskShape();
+    const idealHeight = MAGIC_HEIGHT;
     const {innerWidth, innerHeight} = window;
-    const maxWidth = minFloor(idealWidth, innerWidth);
-    const maxHeight = minFloor(idealHeight, innerHeight); 
-    const lines = makeNewLines(Math.floor(maxHeight / fontSize));
+    const idealWidth = Math.floor(idealHeight * w / h);
+    const initialHeight = minFloor(idealHeight, innerHeight); 
+    const lines = makeNewLines(Math.floor(initialHeight / fontSize));
     this.state = {
       lines,
-      idealHeight,
-      idealWidth,
-      maxHeight,
-      maxWidth,
       fontSize,
+      idealWidth,
+      idealHeight,
+      maxWidth: Math.floor(innerWidth),
+      maxHeight: Math.floor(innerHeight),
       canRender: true,
       widthMap: new Map()
     };
@@ -93,12 +96,28 @@ class Output extends Component {
   }
 
   getShape() {
+    const [w, h] = this.props.readMaskShape();
     const {idealWidth, idealHeight} = this.state;
     const {maxWidth, maxHeight} = this.state;
-    return {
+    const output = {
       width: minFloor(idealWidth, maxWidth),
       height: minFloor(idealHeight, maxHeight)
+    };
+    const ratio_width = Math.floor(output.height * w / h);
+    const ratio_height = Math.floor(output.width * h / w);
+    if (ratio_width < output.width) {
+      return {
+        ...output,
+        width: ratio_width 
+      }
     }
+    if (ratio_height < output.height) {
+      return {
+        ...output,
+        height: ratio_height
+      }
+    }
+    return output;
   }
 
   getMaxLines() {
@@ -411,6 +430,7 @@ class Output extends Component {
       }
       await this.lineQueue;
       const numLines = Math.floor(height / fontSize);
+      console.log(numLines)
       this.setState({
         canRender: true,
         lines: makeNewLines(numLines)
@@ -420,11 +440,14 @@ class Output extends Component {
 
   // debounced
   async resetLines() {
-    const {lines} = this.state;
+    const {readMaskShape} = this.props;
+    const {lines, idealHeight} = this.state;
+    const [w, h] = readMaskShape();
     await this.lineQueue;
     this.setState({
       canRender: true,
-      lines: makeNewLines(lines.length)
+      lines: makeNewLines(lines.length),
+      idealWidth: Math.floor(idealHeight * w / h)
     });
   }
 

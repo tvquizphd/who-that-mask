@@ -77,18 +77,26 @@ function RenderOutput(props) {
       );
       const next = formatDexLink(nextIndex);
       return (
-        <div>
-          Current Pokémon: <strong>{prefix} {speciesName}</strong>
-          ...
-          Next:  <Link to={next}>#{nextIndex}</Link>
+        <div className={styles.flex_row}>
+          <span>
+            <Link to='/'>Home</Link>
+          </span>
+          <span>
+            Pokémon <strong>{prefix} {speciesName}</strong>
+          </span>
+          <span>
+            Next:  <Link to={next}>#{nextIndex}</Link>
+          </span>
         </div>
       );
     }
     const randomIndex = Math.ceil(Math.random() * lastPokemon);
     const random = formatDexLink(randomIndex);
     return (
-      <div>
+      <div className={styles.flex_row}>
+        <span>
         Try this Pokémon: <Link to={random}>#{randomIndex}</Link>
+        </span>
       </div>
     );
   })(config);
@@ -118,7 +126,7 @@ function RenderOutput(props) {
             const dexLink = formatDexLink(dexIndex);
             return (
               <div key={dexIndex}>
-                <Link to={dexLink}>Pokémon #{dexIndex}</Link>
+                <Link to={dexLink}>Dex #{dexIndex}</Link>
               </div>
            )
           })}
