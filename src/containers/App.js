@@ -94,9 +94,9 @@ function RenderOutput(props) {
     const random = formatDexLink(randomIndex);
     return (
       <div className={styles.flex_row}>
-        <span>
+        <div className={styles.padded_header}>
         Try this Pokémon: <Link to={random}>#{randomIndex}</Link>
-        </span>
+        </div>
       </div>
     );
   })(config);

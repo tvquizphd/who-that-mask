@@ -62,3 +62,8 @@
   flex-wrap: wrap;
   flex-direction: column;
 }
+
+.padded_header {
+  padding-top: 0.2em;
+  padding-bottom: 0.8em;
+}
