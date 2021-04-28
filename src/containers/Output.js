@@ -3,6 +3,9 @@ import debounce from 'debounce-async';
 import styles from './Output.module.css';
 import OutputLine from './OutputLine';
 import OutputChar from './OutputChar';
+import {
+  constMapInsert, constListReplace
+} from '../functions/ConstUpdaters';
 
 /*
 const sleep = async (ms) => {
@@ -39,16 +42,6 @@ const copyWidthMap = (widthMap, char, elWidthDiff) => {
   return widthMap;
 }
 
-const constMapInsert = (a, i, v) => {
-  return new Map([ ...a, [i, v] ]);
-}
-
-const constListReplace = (a, i, v) => {
-  return a.map((_v, _i) => {
-    return (_i === i) ? v : _v;
-  })
-}
-
 const minFloor = (v0, v1) => {
   return Math.floor(Math.min(v0, v1));
 }
@@ -76,7 +69,6 @@ class Output extends Component {
   constructor(props) {
     super(props);
     const fontSize = 16;
-    const label = 'missingno';
     const [idealWidth, idealHeight] = [450, 950];
     const {innerWidth, innerHeight} = window;
     const maxWidth = minFloor(idealWidth, innerWidth);
@@ -89,7 +81,6 @@ class Output extends Component {
       maxHeight,
       maxWidth,
       fontSize,
-      label: label,
       canRender: true,
       widthMap: new Map()
     };
@@ -128,10 +119,15 @@ class Output extends Component {
     };
   }
 
+  getLabel() {
+    return this.props.label || '?';
+  }
+
   getNextOffsetByColumn(lineState, increment) {
     const {elWidth} = lineState;
     const {width} = this.getShape();
-    const {label, widthMap} = this.state;
+    const {widthMap} = this.state;
+    const label = this.getLabel();
     const maxRange = [...Array(width).keys()];
     const {prior} = maxRange.reduce((result, off) => {
       const {done, prior, sumWidth} = result;
@@ -160,7 +156,7 @@ class Output extends Component {
   }
 
   getNextChar(lineState, increment) {
-    const {label} = this.state;
+    const label = this.getLabel();
     const {alignment, space} = this.props;
     const offset = (()=>{
       if (alignment === 'column' && increment > 0) {
@@ -197,38 +193,22 @@ class Output extends Component {
   }
 
   readMask(input) {
+    const {readMaskPixel, readMaskShape} = this.props;
     const {lineState, lineIdx} = input;
     const {elWidth} = lineState;
     if (!this.checkRatios(elWidth, lineIdx)) {
       return null;
     }
     const ratios = this.getRatios(elWidth, lineIdx);
+    const [maskWidth, maskHeight] = readMaskShape();
     const {widthRatio, heightRatio} = ratios;
 
-    const missing = [
-      [0,0,0,0,0,0,0,0,0],
-      [0,0,0,0,1,1,1,0,0],
-      [0,0,0,0,1,1,1,0,0],
-      [0,0,0,0,1,1,1,0,0],
-      [0,0,0,0,1,1,1,0,0],
-      [0,0,0,0,1,1,1,0,0],
-      [0,0,1,1,1,1,1,0,0],
-      [0,0,1,1,1,1,1,0,0],
-      [0,0,1,1,1,1,1,0,0],
-      [0,0,1,1,1,1,1,0,0],
-      [0,0,1,1,1,1,1,0,0],
-      [0,0,1,1,1,1,1,0,0],
-      [0,0,1,1,1,1,1,0,0],
-      [0,0,1,1,1,1,1,0,0],
-      [0,0,0,0,0,0,0,0,0],
-    ];
-
     // Convert element coords to mask coords
-    const x = Math.floor(widthRatio * missing[0].length);
-    const y = Math.floor(heightRatio * missing.length);
+    const x = Math.floor(widthRatio * maskWidth);
+    const y = Math.floor(heightRatio * maskHeight);
 
     // Return correct character
-    if (missing[y][x]) {
+    if (readMaskPixel(x,y)) {
       const {space} = this.props;
       return this.newChar({
         offset: this.getNextOffset(lineState, 0),
@@ -315,7 +295,8 @@ class Output extends Component {
 
   listHiddenChars() {
     const {space} = this.props;
-    const {widthMap, label} = this.state;
+    const label = this.getLabel();
+    const {widthMap} = this.state;
     const neededChars = label.split('').concat([space]);
     return neededChars.reduce((hiddenLine, char) => {
       if (widthMap.has(char)) {
@@ -461,9 +442,14 @@ class Output extends Component {
   }
 
   shouldComponentUpdate(nextProps, nextState) {
-    const {alignment} = this.props;
-    // Redraw completely if step size changes
-    if (nextProps.alignment !== alignment) {
+    const propsList = [
+      'alignment', 'label', 'space', 'stepSize'
+    ]
+    // Redraw completely if props change
+    const mustReset = propsList.map((p)=> {
+      return this.props[p] !== nextProps[p];
+    }).some(x => !!x);
+    if (mustReset) {
       this.resetLines();
       return false;
     }

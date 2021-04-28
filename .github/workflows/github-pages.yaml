@@ -14,7 +14,7 @@ jobs:
         run: |
           yarn install
           yarn build
-          mkdir build/row/ && cp build/index.html build/row/index.html
+          mkdir build/dex/ && cp build/index.html build/dex/index.html
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@4.1.1
         with:

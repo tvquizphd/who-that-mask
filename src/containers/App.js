@@ -1,18 +1,125 @@
-import React from "react";
+import React, {useState} from "react";
 import {
   BrowserRouter as Router,
+  useLocation,
   Switch,
   Route,
+  Link
 } from "react-router-dom";
 
-import Output from './Output.js';
+import UrlOutput from './UrlOutput.js';
+import DexOutput from './DexOutput.js';
 
-function RenderOutput({alignment}) {
+// Query parameter parsers
+const parseBoolean = (v, f=false, t=true) => {
+  return v == null ? f: t;
+}
+const parseAnyString = (v, alt=null) => {
+  return [null, ''].includes(v) ? alt : v;
+}
+
+const useQuery = (parsers) => {
+  const query = new URLSearchParams(useLocation().search);
+  // Basically accept any value that doesn't parse as null
+  return Object.entries(parsers).reduce((result, [key, parser]) => {
+    const value = parser(query.get(key));
+    if (value !== null) {
+      result[key] = value;
+    }
+    return result; 
+  }, {});
+}
+
+const configureProps = (props) => {
+  // The slug defines the header and valid query parameters
+  return (({slug}) => {
+    const parsers = {
+      'row': (v) => parseBoolean(v, 'column', 'row') 
+    };
+    if (slug[0] === 'dex') {
+      return {
+        navigation: 'dex',
+        parsers: {
+          ...parsers,
+          'n': parseAnyString
+        }
+      };
+    }
+    return {
+      navigation: 'home',
+      parsers: {
+        ...parsers,
+        'url': (v) => parseAnyString(v)
+      }
+    };
+  })(props);
+}
+
+function RenderOutput(props) {
+  const [speciesIndex, setSpeciesIndex] = useState(NaN);
+  const [speciesName, setSpeciesName] = useState('Loading...');
+
+  const config = configureProps(props);
+  config.query = useQuery(config.parsers);
+  // Configure the navigation
+  const header = (({navigation, query}) => {
+    const lastPokemon = 898;
+    if (navigation === 'dex') {
+      const nullPokemon = isNaN(speciesIndex);
+      const prefix = nullPokemon? `#???` : `#${speciesIndex}`;
+      const nextIndex = nullPokemon? 1 : (
+        Math.max(1, (speciesIndex + 1) % (lastPokemon + 1))
+      );
+      const next = `/dex?n=${nextIndex}`;
+      return (
+        <div>
+          Current Pokémon: {prefix} {speciesName}
+          ...
+          Next Pokémon:  <Link to={next}>#{nextIndex}</Link>
+        </div>
+      );
+    }
+    const randomIndex = Math.ceil(Math.random() * lastPokemon);
+    const random = `/dex?n=${randomIndex}`;
+    return (
+      <div>
+        Try this Pokémon: <Link to={random}>#{randomIndex}</Link>
+      </div>
+    );
+  })(config);
+
+  // Configure the main output
+  const output = ((input) => {
+    const {query, navigation} = input;
+    const alignment = query.row;
+
+    if (navigation === 'dex') {
+      const {n} = query;
+      return (
+        <DexOutput alignment={alignment}
+          setSpeciesIndex={setSpeciesIndex}
+          setSpeciesName={setSpeciesName}
+          n={n || ''}
+        ></DexOutput>
+      );
+    }
+    const {url} = query;
+    return (
+      <UrlOutput alignment={alignment}
+        url={url || ''}
+      ></UrlOutput>
+    );
+  })(config);
+
   return (
-    <Output space=' ' stepSize={100}
-      alignment={alignment}
-    >
-    </Output>
+    <div>
+      <div>
+        {header}
+      </div>
+      <div>
+        {output}
+      </div>
+    </div>
   );
 }
 
@@ -22,11 +129,13 @@ function App() {
     <Router basename={process.env.PUBLIC_URL}>
       <div className="App">
         <Switch>
-          <Route path="/row">
-            {RenderOutput({alignment:'row'})}
+          <Route path="/dex">
+            <RenderOutput slug={['dex']}>
+            </RenderOutput>
           </Route>
           <Route path="/">
-            {RenderOutput({alignment:'column'})}
+            <RenderOutput slug={[]}>
+            </RenderOutput>
           </Route>
         </Switch>
       </div>
