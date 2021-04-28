@@ -258,7 +258,6 @@ class DexOutput extends Component {
     this.state = {
       lang: 'en',
       variety: null,
-      invalid: false,
       spriteIndex: 0,
       pokemon: makeEmptyPokemon()
     };
@@ -301,6 +300,8 @@ class DexOutput extends Component {
   async loadPokemon(n0, spriteIndex) {
     let mon0 = undefined;
     let mon1 = undefined;
+    const missingNo = makeEmptyPokemon();
+    const missingName = missingNo.getName(this.state.lang); 
     const nNumber = parseAbsoluteInteger(n0, NaN);
     const isZero = nNumber === 0;
     const isEmpty = n0.length === 0;
@@ -315,6 +316,7 @@ class DexOutput extends Component {
       mon0 = await this.dex.getPokemonSpeciesByName(nameOrNumber);
     }
     catch (e0) {
+      this.props.setSpeciesName(missingName);
       console.error(e0)
     }
     if (mon0) {
@@ -324,6 +326,7 @@ class DexOutput extends Component {
         mon1 = await this.dex.getPokemonByName(variety);
       }
       catch (e1) {
+        this.props.setSpeciesName(missingName);
         console.error(e1); 
       }
       if (mon1) {
@@ -331,10 +334,9 @@ class DexOutput extends Component {
       }
       try {
         await pokemon.loadSprite(variety, spriteIndex)
-        this.props.setSpeciesName(pokemon.getName(this.state.lang))
-        this.props.setSpeciesIndex(pokemon.id)
+        this.props.setSpeciesName(pokemon.getName(this.state.lang));
+        this.props.setSpeciesIndex(pokemon.id);
         this.setState({
-          invalid: false,
           pokemon: pokemon,
           variety: variety
         });
@@ -342,10 +344,8 @@ class DexOutput extends Component {
       catch (badSprite) {
         const url = badSprite.url || '';
         const msg = (!url.length)? 'No url!' : `Invalid url: ${url}`;
+        this.props.setSpeciesName(missingName);
         console.error(msg);
-        this.setState({
-          invalid: true
-        })
       }
     }
   }
