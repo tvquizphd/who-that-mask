@@ -14,7 +14,6 @@ const sleep = async (ms) => {
   })();
 }*/
 const MAGIC_HEIGHT = 950;
-const MAX_WIDTH = 450;
 
 const makeNewLine = (line=[]) => {
   return {
