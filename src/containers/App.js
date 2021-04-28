@@ -73,7 +73,7 @@ function RenderOutput(props) {
       const next = `/dex?n=${nextIndex}`;
       return (
         <div>
-          Current Pokémon: <em>{prefix} {speciesName}</em>
+          Current Pokémon: <strong>{prefix} {speciesName}</strong>
           ...
           Next Pokémon:  <Link to={next}>#{nextIndex}</Link>
         </div>
