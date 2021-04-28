@@ -439,13 +439,20 @@ class Output extends Component {
   // debounced
   async resetLines() {
     const {readMaskShape} = this.props;
-    const {lines, idealHeight} = this.state;
+    const {idealHeight} = this.state;
     const [w, h] = readMaskShape();
     await this.lineQueue;
     this.setState({
-      canRender: true,
-      lines: makeNewLines(lines.length),
+      canRender: false,
       idealWidth: Math.floor(idealHeight * w / h)
+    }, () => {
+      const {fontSize} = this.state;
+      const {height} = this.getShape();
+      const numLines = Math.floor(height / fontSize);
+      this.setState({
+        canRender: true,
+        lines: makeNewLines(numLines),
+      });
     });
   }
 
