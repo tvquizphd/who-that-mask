@@ -430,7 +430,6 @@ class Output extends Component {
       }
       await this.lineQueue;
       const numLines = Math.floor(height / fontSize);
-      console.log(numLines)
       this.setState({
         canRender: true,
         lines: makeNewLines(numLines)
