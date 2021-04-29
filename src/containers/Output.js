@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import debounce from 'debounce-async';
+import DebounceAsync from '../functions/Debounce';
 import styles from './Output.module.css';
 import OutputLine from './OutputLine';
 import OutputChar from './OutputChar';
@@ -55,17 +55,6 @@ const indexLabel = (label, offset) => {
   return label[offset % label.length];
 }
 
-const debounceAsync = (fn, t) => {
-  const debounced = debounce(fn, t);
-  return async function(...args) {
-    return await new Promise((resolve)=>{
-      debounced.apply(this, args)
-        .then((result)=>{resolve(result)})
-        .catch(()=>{resolve(null)});
-    });
-  }
-}
-
 class Output extends Component {
   constructor(props) {
     super(props);
@@ -86,8 +75,8 @@ class Output extends Component {
       canRender: true,
       widthMap: new Map()
     };
-    this.updateShape = debounceAsync(this.updateShape, 333).bind(this);
-    this.resetLines = debounceAsync(this.resetLines, 333).bind(this);
+    this.updateShape = DebounceAsync(this.updateShape, 333).bind(this);
+    this.resetLines = DebounceAsync(this.resetLines, 333).bind(this);
     this.enqueueLineUpdate = this.enqueueLineUpdate.bind(this);
     this.addCharsToLine = this.addCharsToLine.bind(this);
     this.addCharToLine = this.addCharToLine.bind(this);

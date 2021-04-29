@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
 import {Pokedex} from 'pokeapi-js-wrapper';
+import SobelFilter from './SobelFilter';
 import Output from './Output.js';
 import {
   constMapInsert, constListReplace
@@ -162,6 +163,7 @@ class Pokemon {
     this.varietyMap = constMapInsert(this.varietyMap, variety, {
       sprites: sprites
     });
+    return this.getSprites(variety);
   }
 
   setSprite(variety, spriteIndex=0, sprite=null) {
@@ -171,6 +173,7 @@ class Pokemon {
       );
       this.setSprites(variety, sprites);
     }
+    return this.getSprite(variety, spriteIndex);
   }
 
   getSprites(variety) {
@@ -185,10 +188,11 @@ class Pokemon {
   loadSprite(variety, index=0) {
     return new Promise((resolve, reject) => {
       const sprite = this.getSprite(variety, index=0) || {};
-      const {url} = sprite;
+      const url = sprite.url || '';
       if (!url) {
         reject({url: ''});
       }
+
       const spriteImage = new Image();
       spriteImage.crossOrigin = "Anonymous";
       spriteImage.onload = async () => {
@@ -208,7 +212,6 @@ class Pokemon {
           [`Invalid ${what}: ${url}`, `No ${what}`][+noUrl]
         ));
       }
-      
       spriteImage.src = url; 
     });
   }
@@ -436,7 +439,7 @@ class DexOutput extends Component {
     this.setState({
       spriteIndex: spriteIndex,
       pokemon: pokemon,
-      variety: variety,
+      variety: variety
     });
     this.props.setSpeciesName(pokemon.getName(lang));
     this.props.setSpeciesIndex(pokemon.id);
@@ -485,8 +488,7 @@ class DexOutput extends Component {
       return p.getName(lang) || 'DEX ERR ';
     });
 
-    return (
-      <div>
+    const output = (
         <Output space=' ' stepSize={100}
           readMaskShape={this.readMaskShape}
           readMaskPixel={this.readMaskPixel}
@@ -494,6 +496,22 @@ class DexOutput extends Component {
           alignment={alignment}
         >
         </Output>
+    );
+    // TODO
+    const {url, canvas} = this.spriteCall(({p,v,s}) => {
+      return p.getSprite(v,s) || {};
+    });
+    return (
+      <div>
+        {false? output : ''}
+        <a href={url || '/'}>
+          <SobelFilter
+            source={canvas}
+            vertex='/vertex.glsl'
+            fragment='/fragment.glsl'
+          >
+          </SobelFilter>
+        </a>
       </div>
     )
   }
