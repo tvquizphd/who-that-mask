@@ -481,6 +481,7 @@ class Output extends Component {
       this.resetLines();
       return false;
     }
+    // Only update if can render
     const {canRender} = nextState;
     return canRender;
   }

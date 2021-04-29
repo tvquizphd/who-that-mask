@@ -88,7 +88,7 @@ class Pokemon {
   }
 
   parseSpriteData(spriteData) {
-    return Object.entries(spriteData).reduce((l0, [k0, v0])=>{
+    return Object.entries(spriteData || {}).reduce((l0, [k0, v0])=>{
       if (k0 === 'other') {
         return Object.entries(v0 || {}).reduce((l1, [k1, v1]) => {
           return Object.entries(v1 || {}).reduce((l2, [k2, v2]) => {
@@ -164,6 +164,15 @@ class Pokemon {
     });
   }
 
+  setSprite(variety, spriteIndex=0, sprite=null) {
+    if (sprite) {
+      const sprites = constListReplace(
+        this.getSprites(variety), spriteIndex, sprite
+      );
+      this.setSprites(variety, sprites);
+    }
+  }
+
   getSprites(variety) {
     const varietyState = this.varietyMap.get(variety) || {};
     return varietyState.sprites || [];
@@ -182,21 +191,22 @@ class Pokemon {
       }
       const spriteImage = new Image();
       spriteImage.crossOrigin = "Anonymous";
-      spriteImage.onload = () => {
+      spriteImage.onload = async () => {
         const canvas = document.createElement('canvas');
         canvas.width = spriteImage.width;
         canvas.height = spriteImage.height;
         canvas.getContext('2d').drawImage(spriteImage,0,0);
-
-        const sprites = constListReplace(this.getSprites(variety), index, {
+        resolve({
           ...sprite,
           canvas: canvas
-        })
-        this.setSprites(variety, sprites);
-        resolve(sprite);
+        });
       };
       spriteImage.onerror = () => {
-        reject({url});
+        const noUrl = !url.length;
+        const what = 'sprite url';
+        reject(new SpriteException(
+          [`Invalid ${what}: ${url}`, `No ${what}`][+noUrl]
+        ));
       }
       
       spriteImage.src = url; 
@@ -248,8 +258,13 @@ const parseAbsoluteInteger = (v, alt=null) => {
 }
 
 function DexException(message) {
-  this.message = message;
   this.name = 'DexException';
+  this.message = message;
+}
+
+function SpriteException(message) {
+  this.name = 'SpriteException';
+  this.message = message;
 }
 
 class DexOutput extends Component {
@@ -285,69 +300,147 @@ class DexOutput extends Component {
 
   componentDidMount() {
     const {n} = this.props;
-    const {spriteIndex} = this.state;
+    const {variety, spriteIndex} = this.state;
     // This call is non-blocking
-    this.loadPokemon(n, spriteIndex);
+    this.loadPokemon(n, variety, spriteIndex);
   }
 
   componentDidUpdate() {
     const {n} = this.props;
-    const {spriteIndex} = this.state;
+    const {variety, spriteIndex} = this.state;
     // This call is non-blocking
-    this.loadPokemon(n, spriteIndex);
+    this.loadPokemon(n, variety, spriteIndex);
   }
 
-  async loadPokemon(n0, spriteIndex) {
-    let mon0 = undefined;
-    let mon1 = undefined;
-    const missingNo = makeEmptyPokemon();
-    const missingName = missingNo.getName(this.state.lang); 
-    const nNumber = parseAbsoluteInteger(n0, NaN);
+  isSameSpecies(pokemonOrNameOrNumber) {
+    // Flexible type for input
+    const n = ((value) => {
+      if (value instanceof Pokemon) {
+        return value.id;
+      }
+      return value;
+    })(pokemonOrNameOrNumber);
+
+    return this.spriteCall(({p}) => {
+      return [p.name, p.id].includes(n);
+    });
+  }
+
+  isSameVariety(pokemon, variety) {
+    if (!this.isSameSpecies(pokemon)) {
+      return false;
+    }
+    return this.spriteCall(({v}) => {
+      return v === variety;
+    })
+  }
+
+  isSameSprite(pokemon, variety, spriteIndex) {
+    if (!this.isSameVariety(pokemon, variety)) {
+      return false;
+    }
+    return this.spriteCall(({s}) => {
+      return s === spriteIndex;
+    })
+  }
+
+  async loadPokemonSpecies(n) {
+    const nNumber = parseAbsoluteInteger(n, NaN);
     const isZero = nNumber === 0;
-    const isEmpty = n0.length === 0;
-    try {
-      if (isEmpty) {
-        throw new DexException('No species name or dex number!');
-      }
-      if (isZero) {
-        throw new DexException('Invalid dex number!');
-      }
-      const nameOrNumber = isNaN(nNumber)? n0.toLowerCase() : nNumber;
-      mon0 = await this.dex.getPokemonSpeciesByName(nameOrNumber);
+    const isEmpty = n.length === 0;
+    if (isEmpty) {
+      throw new DexException('No species name or dex number!');
     }
-    catch (e0) {
-      this.props.setSpeciesName(missingName);
-      console.error(e0)
+    if (isZero) {
+      throw new DexException('Invalid dex number!');
     }
-    if (mon0) {
-      const pokemon = new Pokemon(mon0);
-      const variety = pokemon.varietyDefault || pokemon.name;
+    const nameOrNumber = isNaN(nNumber)? n.toLowerCase() : nNumber;
+    const newSpecies = !this.isSameSpecies(nameOrNumber);
+    // Don't bother reloading the same species
+    const pokemon = newSpecies? new Pokemon(
+      await this.dex.getPokemonSpeciesByName(nameOrNumber)
+    ) : this.spriteCall(({p}) => p);
+    // Always return pokemon
+    return pokemon; 
+  }
+
+  async loadPokemonSprites(pokemon, variety) {
+    // Don't bother reloading the same variety
+    if (this.isSameVariety(pokemon, variety)) {
+      return pokemon.getSprites(variety);
+    }
+    return pokemon.parseSpriteData(
+      (await this.dex.getPokemonByName(variety)).sprites
+    )
+  }
+
+  async loadPokemonSprite(pokemon, variety, spriteIndex) {
+    // Don't bother reloading the same sprite
+    if (this.isSameSprite(pokemon, variety, spriteIndex)) {
+      return pokemon.getSprite(variety, spriteIndex);
+    }
+    return await pokemon.loadSprite(variety, spriteIndex);
+  }
+
+  async loadPokemon(n, v=null, spriteIndex=0) {
+    const {lang} = this.state;
+    const pokemon = await (async () => {
       try {
-        mon1 = await this.dex.getPokemonByName(variety);
+        return await this.loadPokemonSpecies(n);
       }
-      catch (e1) {
-        this.props.setSpeciesName(missingName);
-        console.error(e1); 
+      catch (err) {
+        console.error(err);
+        return makeEmptyPokemon();
       }
-      if (mon1) {
-        pokemon.setSprites(variety, pokemon.parseSpriteData(mon1.sprites)) 
-      }
-      try {
-        await pokemon.loadSprite(variety, spriteIndex)
-        this.props.setSpeciesName(pokemon.getName(this.state.lang));
-        this.props.setSpeciesIndex(pokemon.id);
-        this.setState({
-          pokemon: pokemon,
-          variety: variety
-        });
-      }
-      catch (badSprite) {
-        const url = badSprite.url || '';
-        const msg = (!url.length)? 'No url!' : `Invalid url: ${url}`;
-        this.props.setSpeciesName(missingName);
-        console.error(msg);
-      }
+    })();
+    const validVariety = [
+      v, this.isSameSpecies(pokemon)
+    ].every(x=>!!x);
+    const variety =  validVariety ? v : (
+      pokemon.varietyDefault || pokemon.name
+    );
+
+    // Don't bother setting state if same sprite
+    const sameSprite = this.isSameSprite(
+      pokemon, variety, spriteIndex
+    );
+    if (sameSprite) {
+      return false;
     }
+    pokemon.setSprites(variety, (
+      await (async () => {
+        try {
+          return await this.loadPokemonSprites(
+            pokemon, variety
+          );
+        }
+        catch (err) {
+          console.error(err); 
+          return pokemon.getSprites(variety);;
+        }
+      })()
+    ));
+    pokemon.setSprite(variety, spriteIndex, (
+      await (async () => {
+        try {
+          return await this.loadPokemonSprite(
+            pokemon, variety, spriteIndex
+          );
+        }
+        catch (err) {
+          console.error(err);
+          return null;
+        }
+      })()
+    ));
+    this.setState({
+      spriteIndex: spriteIndex,
+      pokemon: pokemon,
+      variety: variety,
+    });
+    this.props.setSpeciesName(pokemon.getName(lang));
+    this.props.setSpeciesIndex(pokemon.id);
+    return true;
   }
 
   spriteCall(fn) {
@@ -393,13 +486,15 @@ class DexOutput extends Component {
     });
 
     return (
-      <Output space=' ' stepSize={100}
-        readMaskShape={this.readMaskShape}
-        readMaskPixel={this.readMaskPixel}
-        label={label.toLocaleLowerCase('en-US')}
-        alignment={alignment}
-      >
-      </Output>
+      <div>
+        <Output space=' ' stepSize={100}
+          readMaskShape={this.readMaskShape}
+          readMaskPixel={this.readMaskPixel}
+          label={label.toLocaleLowerCase('en-US')}
+          alignment={alignment}
+        >
+        </Output>
+      </div>
     )
   }
 }
