@@ -1,12 +1,15 @@
 import React, { Component } from 'react';
-import DebounceAsync from '../functions/Debounce';
+import {
+  DebounceAsync, SleepAsync
+}from '../functions/Debounce';
 
-function SobelImageException(message, source) {
+function SobelImageException(message, source='') {
   this.name = 'SobelImageException';
   this.message = message;
   this.source = source;
 }
 
+const SEC = 1000;
 const VEC2 = 2; // a 2D point in X,Y
 const BOX4 = 4; // 4 points in X,Y
 const BOX8 = VEC2 * BOX4; // 8
@@ -24,8 +27,12 @@ class SobelFilter extends Component {
       program: null,
       buffer: null
     };
-    this.initWebgl = DebounceAsync(this.initWebgl, 100).bind(this);
-    this.drawWebgl = DebounceAsync(this.drawWebgl, 100).bind(this);
+    this.initWebgl = DebounceAsync(
+      this.initWebgl, SEC / 100
+    ).bind(this);
+    this.readPixels = DebounceAsync(
+      this.readPixels, SEC / 100
+    ).bind(this);
   }
 
   async initWebgl(source) {
@@ -121,7 +128,7 @@ class SobelFilter extends Component {
   }
 
   // Load source to texture
-  async drawWebgl(source) {
+  drawWebgl(source) {
     const {gl} = this;
 
     // Set glsl attributes
@@ -159,6 +166,57 @@ class SobelFilter extends Component {
     return this.gl.canvas;
   }
 
+  async readPixels(x,y,w,h) {
+    const {gl} = this;
+    const {source} = this.props;
+    const {buffer, program} = this.state;
+    const pixels = new Uint8Array(w*h*4);
+    if (!gl) {
+      throw new SobelImageException('No webgl context', 'canvas');
+    }
+    if (!source) {
+      throw new SobelImageException('No image source', 'canvas');
+    }
+    if (!buffer || !program) {
+      throw new SobelImageException('No webgl program', 'canvas');
+    }
+    this.drawWebgl(source);
+    gl.readPixels(
+      x, y, w, h,
+      gl.RGBA, gl.UNSIGNED_BYTE,
+      pixels
+    ); 
+    if (pixels.every(x=> x===0)) {
+      throw new SobelImageException('Empty webgl buffer', 'canvas');
+    }
+
+    return pixels;
+  }
+
+  async readAllPixels() {
+    while (true) {
+      try {
+        const {canvas} = this.gl;
+        const [x,y,w,h] = [0, 0, canvas.width, canvas.height];
+        const pixels = await this.readPixels(x,y,w,h);
+        if (pixels === null) {
+          throw new SobelImageException('canceled');  
+        }
+        return {
+          width: w,
+          height: h,
+          pixels
+        }
+      }
+      catch (err) {
+        if (err.message !== 'canceled') {
+          console.error(err);
+        }
+        await SleepAsync(SEC);
+      }
+    }
+  }
+
   componentDidMount() {
     this.gl = this.canvasRef.current.getContext('webgl');
   }
@@ -166,12 +224,13 @@ class SobelFilter extends Component {
   render() {
     const {source} = this.props;
     const {fatalError} = this.state;
-    const {buffer, program} = this.state;
 
+    /*
+    const {buffer, program} = this.state;
     if (source && buffer && program) {
       this.drawWebgl(source);
-    }
-    else if (source && !fatalError) {
+    }*/
+    if (source && !fatalError) {
       this.initWebgl(source).catch((err) => {
         if (err instanceof SobelImageException) {
           this.setState({fatalError: true});

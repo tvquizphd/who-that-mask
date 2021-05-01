@@ -1,19 +1,21 @@
 import React, { Component } from 'react';
-import DebounceAsync from '../functions/Debounce';
+import {
+  DebounceAsync
+}from '../functions/Debounce';
 import styles from './Output.module.css';
 import OutputLine from './OutputLine';
 import OutputChar from './OutputChar';
 import {
-  constMapInsert, constListReplace
+  constMapInsert, constListReplace,
+  constListFlatten, constListFlattenIndices
 } from '../functions/ConstUpdaters';
 
-/*
-const sleep = async (ms) => {
-  return await ((ms) => {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  })();
-}*/
 const MAGIC_HEIGHT = 950;
+
+function TextException(message) {
+  this.name = 'TextException';
+  this.message = message;
+}
 
 const makeNewLine = (line=[]) => {
   return {
@@ -51,6 +53,32 @@ const sameFloor = (v0, v1) => {
   return Math.floor(v0) === Math.floor(v1);
 }
 
+const takeRatios = (params) => {
+  const {
+    elWidth, width, lineIdx, maxLines
+  } = params;
+  return {
+    widthRatio: elWidth / width,
+    heightRatio: lineIdx / maxLines
+  };
+}
+
+const boundArtChar = (params) => {
+  const {artWidthMap, h} = params;
+  const {width, maxLines} = params;
+  const {elWidth, lineIdx} = params;
+  const {maskWidth, maskHeight} = params;
+  const {widthRatio, heightRatio} = takeRatios({
+    elWidth, width, lineIdx, maxLines
+  });
+  const x = Math.floor(widthRatio * maskWidth);
+  const y = Math.floor(heightRatio * maskHeight);
+  return {
+    x, y, h,
+    artWidthMap
+  };
+}
+
 const indexLabel = (label, offset) => {
   return label[offset % label.length];
 }
@@ -59,15 +87,17 @@ class Output extends Component {
   constructor(props) {
     super(props);
     const fontSize = 16;
+    const lineHeight = 16;
     const [w, h] = this.props.readMaskShape();
     const idealHeight = MAGIC_HEIGHT;
     const {innerWidth, innerHeight} = window;
     const idealWidth = Math.floor(idealHeight * w / h);
     const initialHeight = minFloor(idealHeight, innerHeight); 
-    const lines = makeNewLines(Math.floor(initialHeight / fontSize));
+    const lines = makeNewLines(Math.floor(initialHeight / lineHeight));
     this.state = {
       lines,
       fontSize,
+      lineHeight,
       idealWidth,
       idealHeight,
       maxWidth: Math.floor(innerWidth),
@@ -109,20 +139,21 @@ class Output extends Component {
   }
 
   getMaxLines() {
-    const {fontSize} = this.state;
+    const {lineHeight} = this.state;
     const {height} = this.getShape();
-    return Math.floor(height / fontSize);
+    return Math.floor(height / lineHeight);
   }
 
   newLine(line=[]) {
     return makeNewLine(line);
   }
 
-  newChar({offset=-1, char='?'}) {
+  newChar({offset=-1, char='?', art=false}) {
     // Offset of -1 means hidden
     return {
       offset: offset,
-      char: char
+      char: char,
+      art: art
     };
   }
 
@@ -163,19 +194,23 @@ class Output extends Component {
   }
 
   getNextChar(lineState, increment) {
+    const {alignment} = this.props;
     const label = this.getLabel();
-    const {alignment, space} = this.props;
     const offset = (()=>{
+      // Column alignment must jump characters after a space
       if (alignment === 'column' && increment > 0) {
-        const {char} = readLastChar(lineState) || {};
-        if (char === space) {
+        const {art} = readLastChar(lineState) || {};
+        if (art === true) {
           return this.getNextOffsetByColumn(lineState, increment);
         }
       }
+      // Otherwise, we just increment the next character
       return this.getNextOffset(lineState, increment);
     })();
     const char = indexLabel(label, offset);
-    return this.newChar({offset, char});
+    return this.newChar({
+      offset, char, art: false
+    });
   }
 
   getLastLine(lines) {
@@ -185,47 +220,97 @@ class Output extends Component {
   getRatios(elWidth, lineIdx) {
     const maxLines = this.getMaxLines();
     const {width} = this.getShape();
-    return {
-      widthRatio: elWidth / width,
-      heightRatio: (lineIdx + 0.5) / maxLines
-    };
+    return takeRatios({
+      elWidth, width, lineIdx, maxLines
+    });
   }
 
   checkRatios(elWidth, lineIdx) {
-    const {widthRatio, heightRatio} = this.getRatios(elWidth, lineIdx);
+    const {
+      widthRatio, heightRatio
+    } = this.getRatios(elWidth, lineIdx);
     if (widthRatio > 1 || heightRatio > 1) {
       return false;
     }
     return true;
   }
 
-  readMask(input) {
-    const {readMaskPixel, readMaskShape} = this.props;
+  getArtCharWidths(widthMap, maskWidth) {
+    const {artChars} = this.props;
+    const artCharIndices = constListFlattenIndices(artChars);
+    try {
+      return new Map(artCharIndices.map(
+        ([i0, i1]) => {
+          const artChar = artChars[i0][i1];
+          const elWidth = widthMap.get(artChar) || 0;
+          const {widthRatio} = this.getRatios(elWidth, 0);
+          const w = widthRatio * maskWidth;
+          if (!w) {
+            throw new TextException(`Unknown char width`);
+          }
+          return [artChar, {
+            //TODO w: Math.max(1, Math.floor(w)),
+            w: Math.max(1, Math.floor(elWidth)), // WHY?
+            i0: i0,
+            i1: i1
+          }];
+        }
+      ));
+    }
+    catch (err) {
+      console.error(err);
+      return new Map([]);
+    }
+  }
+
+  getArtCharBounder() {
+    const {widthMap} = this.state;
+    const {readMaskShape} = this.props;
+    const {width} = this.getShape();
+    const maxLines = this.getMaxLines();
+    const [maskWidth, maskHeight] = readMaskShape();
+    const lineRatio = this.getRatios(0, 1).heightRatio;
+    const h = Math.max(1, Math.floor(lineRatio * maskHeight));
+    const artWidthMap = this.getArtCharWidths(widthMap, maskWidth);
+    
+    // Return a function to scale coordinates
+    const bounder = (elWidth, lineIdx) => {
+      return boundArtChar({
+        ...{width, maxLines}, // Input shape
+        ...{maskWidth, maskHeight}, // Output shape
+        ...{artWidthMap, h}, // Constant values
+        ...{elWidth, lineIdx} // Coordinates
+      });
+    };
+    return bounder;
+  }
+
+  async readMask(input) {
+    const {readMaskPixel} = this.props;
+    const {readArtPixel} = this.props;
     const {lineState, lineIdx} = input;
     const {elWidth} = lineState;
     if (!this.checkRatios(elWidth, lineIdx)) {
       return null;
     }
-    const ratios = this.getRatios(elWidth, lineIdx);
-    const [maskWidth, maskHeight] = readMaskShape();
-    const {widthRatio, heightRatio} = ratios;
 
     // Convert element coords to mask coords
-    const x = Math.floor(widthRatio * maskWidth);
-    const y = Math.floor(heightRatio * maskHeight);
+    const {x, y, h, artWidthMap} = input.artCharBounder(
+      elWidth, lineIdx
+    );
 
-    // Return correct character
+    // TODO Return correct character
     if (readMaskPixel(x,y)) {
-      const {space} = this.props;
       return this.newChar({
         offset: this.getNextOffset(lineState, 0),
-        char: space
+        char: await readArtPixel(artWidthMap, h, x, y),
+        art: true
       });
     }
     return this.getNextChar(lineState, 1);
   }
 
-  addCharToLine(input, i) {
+  async addCharToLine(input, i) {
     if (input.done) {
       return input;
     }
@@ -245,7 +330,7 @@ class Output extends Component {
       };
     }
 
-    const nextChar = this.readMask(input);
+    const nextChar = await this.readMask(input);
     if (nextChar === null) {
       return input;
     }
@@ -279,7 +364,7 @@ class Output extends Component {
     };
   }
 
-  addCharsToLine(input, lineState, lineIdx) {
+  async addCharsToLine(input, lineState, lineIdx) {
     const {num, lines, hiddenChars} = input;
     // Line is ready to go
     if (!this.canLineRender(lineState)) {
@@ -287,10 +372,14 @@ class Output extends Component {
     }
 
     const numRange = [...Array(num).keys()];
-    const output = numRange.reduce(this.addCharToLine, {
-      iMax: num - 1, done: false, lineState, lineIdx,
-      hiddenChars: hiddenChars
-    });
+    const output = await numRange.reduce(async (prior, i) => {
+        return this.addCharToLine(await prior, i);
+      }, Promise.resolve({
+        iMax: num - 1, done: false, lineState, lineIdx,
+        artCharBounder: input.artCharBounder,
+        hiddenChars: hiddenChars
+      })
+    );
 
     return {
       ...input,
@@ -301,33 +390,45 @@ class Output extends Component {
   }
 
   listHiddenChars() {
-    const {space} = this.props;
+    const artChars1D = constListFlatten(this.props.artChars);
     const label = this.getLabel();
     const {widthMap} = this.state;
-    const neededChars = label.split('').concat([space]);
-    return neededChars.reduce((hiddenLine, char) => {
+    // Compute a list of all chars that must be rendered
+    return artChars1D.reduce((l0, char) => {
       if (widthMap.has(char)) {
-        return hiddenLine;
+        return l0;
       }
       return [
         this.newChar({
-          char: char,
-          offset: -1
-        }),
-        ...hiddenLine
-      ];
-    }, []);
+          char: char, offset: -1, art: true
+        })
+      ].concat(l0);
+    }, label.split('').reduce((l0, char) => {
+      if (widthMap.has(char)) {
+        return l0;
+      }
+      return [
+        this.newChar({
+          char: char, offset: -1, art: false
+        })
+      ].concat(l0);
+    }, []));
   }
 
   onColumnUpdate() {
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       const {lines} = this.state;
-      const output = lines.reduce(this.addCharsToLine, {
-        hiddenChars: this.listHiddenChars(),
-        num: this.props.stepSize,
-        allReady: true,
-        lines
-      });
+
+      const output = await lines.reduce(async (prior, l, i) => {
+          return this.addCharsToLine(await prior, l, i);
+        }, Promise.resolve({
+          artCharBounder: this.getArtCharBounder(),
+          hiddenChars: this.listHiddenChars(),
+          allReady: true,
+          num: 100,
+          lines
+        })
+      );
 
       if (output.allReady) {
         return this.setState({
@@ -401,7 +502,7 @@ class Output extends Component {
   async updateShape() {
     const newState = {};
     const oldShape = this.getShape();
-    const {maxWidth, maxHeight, fontSize} = this.state;
+    const {maxWidth, maxHeight, lineHeight} = this.state;
     const {innerWidth, innerHeight} = window;
 
     if (!sameFloor(maxWidth, innerWidth)) {
@@ -417,7 +518,7 @@ class Output extends Component {
         return;
       }
       await this.lineQueue;
-      const numLines = Math.floor(height / fontSize);
+      const numLines = Math.floor(height / lineHeight);
       this.setState({
         canRender: true,
         lines: makeNewLines(numLines)
@@ -435,9 +536,9 @@ class Output extends Component {
       canRender: false,
       idealWidth: Math.floor(idealHeight * w / h)
     }, () => {
-      const {fontSize} = this.state;
+      const {lineHeight} = this.state;
       const {height} = this.getShape();
-      const numLines = Math.floor(height / fontSize);
+      const numLines = Math.floor(height / lineHeight);
       this.setState({
         canRender: true,
         lines: makeNewLines(numLines),
@@ -453,14 +554,14 @@ class Output extends Component {
   }
 
   async componentDidUpdate() {
-    //await sleep(1); //sleep helps debug in dev mode
+    // try sleeping to debug
     await this.lineQueue;
     await this.onColumnUpdate();
   }
 
   shouldComponentUpdate(nextProps, nextState) {
     const propsList = [
-      'alignment', 'label', 'space', 'stepSize'
+      'label', 'artChars', 'alignment'
     ]
     // Redraw completely if props change
     const mustReset = propsList.map((p)=> {
@@ -476,12 +577,13 @@ class Output extends Component {
   }
 
   render() {
-    const {fontSize} = this.state;
     const {lines} = this.state;
+    const {fontSize, lineHeight} = this.state;
     const {width, height} = this.getShape();
 
     const outlineStyle = {
       fontSize: `${fontSize}px`,
+      lineHeight: `${lineHeight}px`,
     };
     const centerStyle = {
       'width': `${width}px`,
@@ -492,7 +594,7 @@ class Output extends Component {
       <div style={outlineStyle} className={styles.outline}>
         {lines.map((lineState, i) => {
           const lineStyle ={
-            top: i * fontSize
+            top: i * lineHeight
           };
           return (
             <OutputLine enqueueLineUpdate={this.enqueueLineUpdate}

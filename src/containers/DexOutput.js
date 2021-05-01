@@ -3,14 +3,40 @@ import {Pokedex} from 'pokeapi-js-wrapper';
 import SobelFilter from './SobelFilter';
 import Output from './Output.js';
 import {
-  constMapInsert, constListReplace
+  constMapInsert, constListReplace,
+  constListFlatten
 } from '../functions/ConstUpdaters';
+import {
+  rgb2hsv
+} from '../functions/Colors';
 
 const GENERATIONS = [
   '','i','ii','iii','iv','v','vi','vii','viii', // as of 2021
   'ix', 'x', 'xi', 'xii', 'xiii', 'xiv', 'xv', // until ~2042
   'xvi', 'xvii', 'xviii', 'xix', 'xx', 'xxi' // until ~2060
 ];
+
+const parseArtPixel = (pixelBuffer, i4) => {
+  const [r, g, b] = pixelBuffer.slice(4 * i4, 3 + 4 * (i4));
+  const [h, s, v] = rgb2hsv(r, g, b);
+  // black 0
+  if (v <= (1/255)) {
+    return 0;
+  }
+  // white 1
+  if (s <= (1/255)) {
+    return 1;
+  }
+  // red=2, green=3, blue=4
+  return 2 + Math.floor((h % 360) / (360 / 3));
+}
+
+const maxCharMapWidth = (charMap) => {
+  const charList = [...charMap.values()];
+  return  charList.reduce((wMax, {w}) => {
+    return Math.max(wMax, w);
+  }, 1);
+}
 
 const parseLangList = (list, property) => {
   const extractor = (langMap, lang) => {
@@ -190,7 +216,7 @@ class Pokemon {
       const sprite = this.getSprite(variety, index=0) || {};
       const url = sprite.url || '';
       if (!url) {
-        reject({url: ''});
+        reject(new SpriteException('No sprite url'));
       }
 
       const spriteImage = new Image();
@@ -206,11 +232,7 @@ class Pokemon {
         });
       };
       spriteImage.onerror = () => {
-        const noUrl = !url.length;
-        const what = 'sprite url';
-        reject(new SpriteException(
-          [`Invalid ${what}: ${url}`, `No ${what}`][+noUrl]
-        ));
+        reject(new SpriteException(`Invalid sprite url: ${url}`));
       }
       spriteImage.src = url; 
     });
@@ -260,6 +282,20 @@ const parseAbsoluteInteger = (v, alt=null) => {
   return ((i)=> !isNaN(i) ? Math.abs(i) : alt)(parseInt(v));
 }
 
+// Convert a string n to a lowercase name or a dex index
+const returnValidNameOrNumber = (n) => {
+  const nNumber = parseAbsoluteInteger(n, NaN);
+  const isZero = nNumber === 0;
+  const isEmpty = n.length === 0;
+  if (isEmpty) {
+    throw new DexException('No species name or dex number!');
+  }
+  if (isZero) {
+    throw new DexException('Invalid dex number!');
+  }
+  return isNaN(nNumber)? n.toLowerCase() : nNumber;
+}
+
 function DexException(message) {
   this.name = 'DexException';
   this.message = message;
@@ -273,12 +309,29 @@ function SpriteException(message) {
 class DexOutput extends Component {
   constructor(props) {
     super(props);
+
+    // TODO RM
+    this.todoRef = React.createRef();
+
     this.state = {
       lang: 'en',
+      artBuffer: {
+        pixels: [],
+        height: 0,
+        width: 0
+      },
       variety: null,
       spriteIndex: 0,
       pokemon: makeEmptyPokemon()
     };
+    this.sobelRef = React.createRef();
+    this.artChars = [
+      [' '], // black
+      ['|'], // white
+      ['¯','–','_'], // red
+      ['\\'], // green 
+      ['/'] // blue
+    ];
     this.dex = new Pokedex();
     this.missing = [
       [0,0,0,0,0,0,0,0,0],
@@ -297,11 +350,15 @@ class DexOutput extends Component {
       [0,0,1,1,1,1,1,0,0],
       [0,0,0,0,0,0,0,0,0],
     ];
+    this.readArtPixel = this.readArtPixel.bind(this);
     this.readMaskPixel = this.readMaskPixel.bind(this);
     this.readMaskShape = this.readMaskShape.bind(this);
   }
 
   componentDidMount() {
+    // TODO RM
+    this.ctx = this.todoRef.current.getContext('2d');
+
     const {n} = this.props;
     const {variety, spriteIndex} = this.state;
     // This call is non-blocking
@@ -347,17 +404,7 @@ class DexOutput extends Component {
     })
   }
 
-  async loadPokemonSpecies(n) {
-    const nNumber = parseAbsoluteInteger(n, NaN);
-    const isZero = nNumber === 0;
-    const isEmpty = n.length === 0;
-    if (isEmpty) {
-      throw new DexException('No species name or dex number!');
-    }
-    if (isZero) {
-      throw new DexException('Invalid dex number!');
-    }
-    const nameOrNumber = isNaN(nNumber)? n.toLowerCase() : nNumber;
+  async loadPokemonSpecies(nameOrNumber) {
     const newSpecies = !this.isSameSpecies(nameOrNumber);
     // Don't bother reloading the same species
     const pokemon = newSpecies? new Pokemon(
@@ -373,7 +420,7 @@ class DexOutput extends Component {
       return pokemon.getSprites(variety);
     }
     return pokemon.parseSpriteData(
-      (await this.dex.getPokemonByName(variety)).sprites
+      (await this.dex.getPokemonByName(variety) || {}).sprites
     )
   }
 
@@ -389,7 +436,8 @@ class DexOutput extends Component {
     const {lang} = this.state;
     const pokemon = await (async () => {
       try {
-        return await this.loadPokemonSpecies(n);
+        const nameOrNumber = returnValidNameOrNumber(n);
+        return await this.loadPokemonSpecies(nameOrNumber);
       }
       catch (err) {
         console.error(err);
@@ -455,6 +503,129 @@ class DexOutput extends Component {
     });
   }
 
+  async accessArtBuffer(x, y, w, h) {
+    const sobelFilter = this.sobelRef.current;
+    const artBuffer = await (async () => {
+      if (this.state.artBuffer.pixels.length > 0) {
+        return this.state.artBuffer;
+      }
+      const artBuffer = await sobelFilter.readAllPixels();
+      await new Promise((resolve) => {
+        this.setState({artBuffer}, resolve);
+      });
+      return artBuffer;
+    })();
+    /*
+    let minIdx = Infinity;
+    let maxIdx = 0;
+    */
+    const rowRange = [...Array(h).keys()];
+    const smallBuffer = rowRange.reduce((pixels, iy) => {
+      const flip_y = artBuffer.height - (y + iy);
+      const start = (flip_y * artBuffer.width + x);
+      const end = start + w;
+
+      /*
+      minIdx = Math.min(minIdx, start);
+      maxIdx = Math.max(maxIdx, end);
+      */
+
+      return pixels.concat(
+        [].slice.call(artBuffer.pixels, start * 4, end * 4)
+      )
+    }, []);
+    /*
+    console.log({
+      min: minIdx / (475 * 475),
+      max: maxIdx / (475 * 475)
+    })*/
+    return smallBuffer;
+  }
+
+  async readMaxArtPixelColumns(x, y, w, h) {
+    const smallBuffer = await this.accessArtBuffer(x, y, w, h);
+    const pixelRange = [...Array(w * h).keys()];
+    // TODO RM
+    this.ctx.clearRect(x, y, w, h);
+    return [...pixelRange.reduce((cols, i4)=> {
+      const col = cols.get(i4 % w) || [];
+      const pixel = parseArtPixel(smallBuffer, i4);
+
+      // TODO RM
+      const [r, g, b] = [
+        [0,0,0],
+        [255,255,255],
+        [255,0,0],
+        [0,255,0],
+        [0,0,255]
+      ][pixel];
+      const row = col.length;
+      this.ctx.fillStyle = "rgba("+r+","+g+","+b+","+(1.0)+")";
+      this.ctx.fillRect( x + (i4 % w), y + row, 1, 1 );
+
+      return cols.set(i4 % w, col.concat([pixel]));
+    }, new Map([])).values()];
+  }
+
+  async readArtPixel(artWidthMap, h, x, y) {
+    if (!artWidthMap.size) {
+      return '?'; //TODO
+    }
+    const pixelColumns = await this.readMaxArtPixelColumns(
+      x, y, maxCharMapWidth(artWidthMap), h
+    );
+    const charCounts = [...pixelColumns].reduce((total, column) => {
+      return [...artWidthMap].reduce(
+        (counts, [char, {w, i0, i1}], ix) => {
+          const n_region = this.artChars[i0].length;
+          const c = (ix < w) ? column : [];
+          // Handle vertical regions for ¯–_
+          const region = {
+            min: (i1 / n_region) * pixelColumns.length,
+            max: ((i1+1) / n_region) * pixelColumns.length
+          };
+          const count = c.reduce(({n, t}, pixel, iy) => {
+            if (iy < region.min || iy >= region.max) {
+              return {n, t};
+            }
+            return {
+              n: n + (pixel === i0),
+              t: t + 1
+            };
+          }, counts.get(char) || {n: 0, t: 0})
+          return counts.set(char, count)
+        }
+      , total);
+    }, new Map([]));
+    const charRatios = new Map( 
+      [...charCounts].map(([char, {n, t}]) => {
+        return [char, n / Math.max(t, 1)];
+      })
+    );
+    const artChars1D = constListFlatten(this.artChars);
+    const out = artChars1D.reverse().reduce(
+      (result, char) => {
+        const max = charRatios.get(result) || 0; 
+        const {i0, i1} = artWidthMap.get(char);
+        const count = charRatios.get(char);
+        if (i0 === 0 && i1 === 0) {
+          if (4 * max <= count) {
+            return char;
+          }
+          return result;
+        }
+        if (max <= count) {
+          return char;
+        }
+        return result;
+      }, ''
+    );
+    if (!out.length) {
+      return '?'; // TODO
+    }
+    return out;
+  }
+
   readMaskPixel(x,y) {
     const {canvas} = this.spriteCall(({p,v,s}) => {
       const sprite = p.getSprite(v,s) || {};
@@ -489,10 +660,12 @@ class DexOutput extends Component {
     });
 
     const output = (
-        <Output space=' ' stepSize={100}
+        <Output 
           readMaskShape={this.readMaskShape}
           readMaskPixel={this.readMaskPixel}
+          readArtPixel={this.readArtPixel}
           label={label.toLocaleLowerCase('en-US')}
+          artChars={this.artChars}
           alignment={alignment}
         >
         </Output>
@@ -501,17 +674,28 @@ class DexOutput extends Component {
     const {url, canvas} = this.spriteCall(({p,v,s}) => {
       return p.getSprite(v,s) || {};
     });
+    // TODO RM
+    const width = canvas?.width || 100;
+    const height = canvas?.height || 100;
     return (
       <div>
-        {false? output : ''}
+        {true? output : ''}
         <a href={url || '/'}>
           <SobelFilter
+            ref={this.sobelRef}
             source={canvas}
             vertex='/vertex.glsl'
             fragment='/fragment.glsl'
           >
           </SobelFilter>
         </a>
+        
+        <canvas
+          width={width} height={height}
+          id="todo-remove" ref={this.todoRef}
+        > 
+        </canvas>
+
       </div>
     )
   }

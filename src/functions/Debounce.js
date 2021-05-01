@@ -15,4 +15,14 @@ const DebounceAsync = (fn, t) => {
     });
   }
 }
-export default DebounceAsync;
+
+const SleepAsync = async (ms) => {
+  return await ((ms) => {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  })();
+}
+
+export {
+  DebounceAsync,
+  SleepAsync
+};
