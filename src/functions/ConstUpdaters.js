@@ -8,28 +8,7 @@ const constListReplace = (a, i, v) => {
   });
 }
 
-const constListFlatten = (a) => {
-  return a.reduce((list, v) => {
-    if (Array.isArray(v)) {
-      return list.concat(constListFlatten(v));
-    }
-    return list.concat(v);
-  }, []);
-}
-
-const constListFlattenIndices = (a, indices=[]) => {
-  return a.reduce((list, v, i) => {
-    const nextIndices = [...indices, i];
-    if (Array.isArray(v)) {
-      return list.concat(constListFlattenIndices(v, nextIndices));
-    }
-    return list.concat([nextIndices]);
-  }, []);
-}
-
 export {
   constMapInsert,
-  constListReplace,
-  constListFlatten,
-  constListFlattenIndices
+  constListReplace
 }

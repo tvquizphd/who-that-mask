@@ -1,6 +1,6 @@
 import debounce from 'debounce-async'; 
 
-const DebounceAsync = (fn, t) => {
+const debounceAsync = (fn, t) => {
   const debounced = debounce(fn, t);
   return async function(...args) {
     return await new Promise((resolve, reject)=>{
@@ -16,13 +16,11 @@ const DebounceAsync = (fn, t) => {
   }
 }
 
-const SleepAsync = async (ms) => {
-  return await ((ms) => {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  })();
+const sleepAsync = async (ms) => {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export {
-  DebounceAsync,
-  SleepAsync
+  debounceAsync,
+  sleepAsync
 };

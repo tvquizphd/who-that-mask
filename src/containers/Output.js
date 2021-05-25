@@ -1,13 +1,11 @@
 import React, { Component } from 'react';
 import {
-  DebounceAsync
-}from '../functions/Debounce';
+  debounceAsync
+}from '../functions/Async';
 import styles from './Output.module.css';
 import OutputLine from './OutputLine';
-import OutputChar from './OutputChar';
 import {
-  constMapInsert, constListReplace,
-  constListFlatten, constListFlattenIndices
+  constMapInsert, constListReplace
 } from '../functions/ConstUpdaters';
 
 const MAGIC_HEIGHT = 950;
@@ -45,8 +43,16 @@ const copyWidthMap = (widthMap, char, elWidthDiff) => {
   return widthMap;
 }
 
-const minFloor = (v0, v1) => {
-  return Math.floor(Math.min(v0, v1));
+const maxRound = (...args) => {
+  return Math.round(Math.max(...args));
+}
+
+const minRound = (...args) => {
+  return Math.round(Math.min(...args));
+}
+
+const minFloor = (...args) => {
+  return Math.floor(Math.min(...args));
 }
 
 const sameFloor = (v0, v1) => {
@@ -71,8 +77,8 @@ const boundArtChar = (params) => {
   const {widthRatio, heightRatio} = takeRatios({
     elWidth, width, lineIdx, maxLines
   });
-  const x = Math.floor(widthRatio * maskWidth);
-  const y = Math.floor(heightRatio * maskHeight);
+  const x = minRound(widthRatio * maskWidth, maskWidth - 1);
+  const y = minRound(heightRatio * maskHeight, maskHeight - 1);
   return {
     x, y, h,
     artWidthMap
@@ -86,8 +92,8 @@ const indexLabel = (label, offset) => {
 class Output extends Component {
   constructor(props) {
     super(props);
-    const fontSize = 16;
-    const lineHeight = 16;
+    const fontSize = 16 * 1; //TODO
+    const lineHeight = 16 * 1; //TODO
     const [w, h] = this.props.readMaskShape();
     const idealHeight = MAGIC_HEIGHT;
     const {innerWidth, innerHeight} = window;
@@ -105,8 +111,8 @@ class Output extends Component {
       canRender: true,
       widthMap: new Map()
     };
-    this.updateShape = DebounceAsync(this.updateShape, 333).bind(this);
-    this.resetLines = DebounceAsync(this.resetLines, 333).bind(this);
+    this.updateShape = debounceAsync(this.updateShape, 333).bind(this);
+    this.resetLines = debounceAsync(this.resetLines, 333).bind(this);
     this.enqueueLineUpdate = this.enqueueLineUpdate.bind(this);
     this.addCharsToLine = this.addCharsToLine.bind(this);
     this.addCharToLine = this.addCharToLine.bind(this);
@@ -236,23 +242,18 @@ class Output extends Component {
   }
 
   getArtCharWidths(widthMap, maskWidth) {
-    const {artChars} = this.props;
-    const artCharIndices = constListFlattenIndices(artChars);
+    const {artKernels} = this.props;
     try {
-      return new Map(artCharIndices.map(
-        ([i0, i1]) => {
-          const artChar = artChars[i0][i1];
-          const elWidth = widthMap.get(artChar) || 0;
+      return new Map(Object.keys(artKernels).map(
+        (char) => {
+          const elWidth = widthMap.get(char) || 0;
           const {widthRatio} = this.getRatios(elWidth, 0);
           const w = widthRatio * maskWidth;
           if (!w) {
             throw new TextException(`Unknown char width`);
           }
-          return [artChar, {
-            //TODO w: Math.max(1, Math.floor(w)),
-            w: Math.max(1, Math.floor(elWidth)), // WHY?
-            i0: i0,
-            i1: i1
+          return [char, {
+            w: maxRound(1, w)
           }];
         }
       ));
@@ -299,11 +300,14 @@ class Output extends Component {
       elWidth, lineIdx
     );
 
-    // TODO Return correct character
+    // Return correct character
     if (readMaskPixel(x,y)) {
+
+      const artChar = await readArtPixel(artWidthMap, h, x, y);
+
       return this.newChar({
         offset: this.getNextOffset(lineState, 0),
-        char: await readArtPixel(artWidthMap, h, x, y),
+        char: artChar,
         art: true
       });
     }
@@ -390,11 +394,11 @@ class Output extends Component {
   }
 
   listHiddenChars() {
-    const artChars1D = constListFlatten(this.props.artChars);
+    const {artKernels} = this.props;
     const label = this.getLabel();
     const {widthMap} = this.state;
     // Compute a list of all chars that must be rendered
-    return artChars1D.reduce((l0, char) => {
+    return Object.keys(artKernels).reduce((l0, char) => {
       if (widthMap.has(char)) {
         return l0;
       }
@@ -554,14 +558,13 @@ class Output extends Component {
   }
 
   async componentDidUpdate() {
-    // try sleeping to debug
     await this.lineQueue;
     await this.onColumnUpdate();
   }
 
   shouldComponentUpdate(nextProps, nextState) {
     const propsList = [
-      'label', 'artChars', 'alignment'
+      'label', 'artKernels', 'alignment'
     ]
     // Redraw completely if props change
     const mustReset = propsList.map((p)=> {
@@ -596,18 +599,13 @@ class Output extends Component {
           const lineStyle ={
             top: i * lineHeight
           };
+          const {line} = lineState;
           return (
             <OutputLine enqueueLineUpdate={this.enqueueLineUpdate}
               canRender={this.canLineRender(lineState)}
-              stl={lineStyle} cls={styles.line} key={i} id={i}
+              stl={lineStyle} cls={styles.line}
+              line={line} key={i} id={i}
             >
-              {lineState.line.map(({char}, ii) => {
-                return (
-                  <OutputChar key={ii}>
-                    {char}
-                  </OutputChar>
-                );
-              })}
             </OutputLine>
           );
         })}

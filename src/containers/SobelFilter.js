@@ -1,7 +1,7 @@
 import React, { Component } from 'react';
 import {
-  DebounceAsync, SleepAsync
-}from '../functions/Debounce';
+  debounceAsync, sleepAsync
+} from '../functions/Async';
 
 function SobelImageException(message, source='') {
   this.name = 'SobelImageException';
@@ -23,14 +23,13 @@ class SobelFilter extends Component {
     this.image_size = 'u_image_size';
     this.canvasRef = React.createRef();
     this.state = {
-      fatalError: false,
       program: null,
       buffer: null
     };
-    this.initWebgl = DebounceAsync(
+    this.initWebgl = debounceAsync(
       this.initWebgl, SEC / 100
     ).bind(this);
-    this.readPixels = DebounceAsync(
+    this.readPixels = debounceAsync(
       this.readPixels, SEC / 100
     ).bind(this);
   }
@@ -212,7 +211,7 @@ class SobelFilter extends Component {
         if (err.message !== 'canceled') {
           console.error(err);
         }
-        await SleepAsync(SEC);
+        await sleepAsync(SEC);
       }
     }
   }
@@ -221,16 +220,9 @@ class SobelFilter extends Component {
     this.gl = this.canvasRef.current.getContext('webgl');
   }
 
-  render() {
+  componentDidUpdate(prevProps) {
     const {source} = this.props;
-    const {fatalError} = this.state;
-
-    /*
-    const {buffer, program} = this.state;
-    if (source && buffer && program) {
-      this.drawWebgl(source);
-    }*/
-    if (source && !fatalError) {
+    if (!prevProps.source && source) {
       this.initWebgl(source).catch((err) => {
         if (err instanceof SobelImageException) {
           this.setState({fatalError: true});
@@ -239,7 +231,9 @@ class SobelFilter extends Component {
         console.error(err);
       });
     }
+  }
 
+  render() {
     return (
       <canvas id="sobel-filter-canvas" ref={this.canvasRef}> 
       </canvas>

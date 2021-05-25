@@ -92,7 +92,7 @@ vec4 rgb_angle_steps(float acute_ratio) {
 vec4 color_angle_steps(float grad, float acute_ratio) {
 
   // for testing
-  return rgb_angle_steps(get_acute_ratio(v_image_pos.x - 0.5, v_image_pos.y - 0.5));
+  // return rgb_angle_steps(get_acute_ratio(v_image_pos.x - 0.5, v_image_pos.y - 0.5));
 
   // Return black if below threshhold
   if (grad < 0.5) {
@@ -114,6 +114,21 @@ vec4 color_angle_steps(float grad, float acute_ratio) {
   return rgb_angle_steps(acute_ratio);
 }
 
+vec4 color_edge(mat3 x_kernel, mat3 y_kernel, mat3 patch) {
+  // Return if transparent
+  if (sample_offset(0, 0).a < 0.5) {
+    return vec4(0.0);
+  }
+
+  // Apply a sobel filter in 2D
+  float edgeX = convolve3x3(x_kernel, patch);
+  float edgeY = convolve3x3(y_kernel, patch);
+  float grad = length(vec2(edgeX, edgeY));
+
+  float acute_ratio = get_acute_ratio(edgeX, edgeY);
+  return color_angle_steps(grad, acute_ratio);
+}
+
 void main() {
   mat3 patch;
   vec3 blend = vec3(1,2,1);
@@ -128,12 +143,5 @@ void main() {
       patch[ix][iy] = grayscale(sample_offset(ix - 1, iy - 1));
     }
   }
-
-  // Apply a sobel filter in 2D
-  float edgeX = convolve3x3(x_kernel, patch);
-  float edgeY = convolve3x3(y_kernel, patch);
-  float grad = length(vec2(edgeX, edgeY));
-
-  float acute_ratio = get_acute_ratio(edgeX, edgeY);
-  gl_FragColor = color_angle_steps(grad, acute_ratio);
+  gl_FragColor = color_edge(x_kernel, y_kernel, patch);
 }

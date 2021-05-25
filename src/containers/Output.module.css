@@ -4,8 +4,8 @@
 }
 
 .outline > .line {
-	white-space: nowrap;
 	position: absolute;
+	white-space: pre;
   height: auto;
   width: auto;
 }
