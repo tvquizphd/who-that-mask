@@ -14,18 +14,24 @@ class OutputLine extends Component {
 
   render() {
     const {cls, stl} = this.props;
-    const {children} = this.props;
+    const {line} = this.props;
+    const text = line.map(({char}) => {
+      if (char === ' ') {
+        return ' ';
+      }
+      return char;
+    }).join('') + '\n';
+
     return (
       <div style={stl} className={cls}
         ref={(el) => {
           if (el) {
-          const {width} = el.getBoundingClientRect();
+            const {width} = el.getBoundingClientRect();
             this.checkWidth(width);
           }
         }}
       >
-        {children}
-        <br/>
+      {text}
       </div>
     );
   }
