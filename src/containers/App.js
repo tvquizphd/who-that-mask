@@ -61,7 +61,7 @@ const formatDexLink = (n) => {
 }
 
 function RenderOutput(props) {
-  const lastPokemon = 898;
+  const lastPokemon = 1000;
   const [speciesIndex, setSpeciesIndex] = useState(NaN);
   const [speciesName, setSpeciesName] = useState('Loading...');
 
